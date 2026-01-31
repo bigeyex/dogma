@@ -282,6 +282,8 @@ interface ResolvedStyles {
   justifyContent?: 'MIN' | 'CENTER' | 'MAX' | 'SPACE_BETWEEN';
   alignItems?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH';
   gap?: number;
+  gapX?: number;
+  gapY?: number;
   flexWrap?: 'WRAP' | 'NO_WRAP';
   flexGrow?: number;
 
@@ -364,10 +366,24 @@ function resolveClasses(classes: string[], customColors: Record<string, string>)
     else if (cls === 'items-stretch') styles.alignItems = 'STRETCH';
 
     // Gap
+    else if (cls.startsWith('gap-x-') || cls.startsWith('space-x-')) {
+      const value = cls.startsWith('gap-x-') ? cls.slice(6) : cls.slice(8);
+      const val = parseSpacing(value);
+      if (val !== undefined) styles.gapX = val;
+    }
+    else if (cls.startsWith('gap-y-') || cls.startsWith('space-y-')) {
+      const value = cls.startsWith('gap-y-') ? cls.slice(6) : cls.slice(8);
+      const val = parseSpacing(value);
+      if (val !== undefined) styles.gapY = val;
+    }
     else if (cls.startsWith('gap-')) {
       const value = cls.slice(4);
       const val = parseSpacing(value);
-      if (val !== undefined) styles.gap = val;
+      if (val !== undefined) {
+        styles.gap = val;
+        styles.gapX = val;
+        styles.gapY = val;
+      }
     }
 
     // Width
@@ -710,9 +726,12 @@ function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, parentL
       node.resize(node.width, styles.height);
       node.layoutSizingVertical = 'FIXED';
     } else {
-      // Default Height: HUG for mostly everything
+      // Default Height: 1 instead of Figma's 100 default
       if (node.type === 'FRAME' && node.layoutMode !== 'NONE') {
         node.layoutSizingVertical = 'HUG';
+      } else {
+        node.resize(node.width, 1);
+        node.layoutSizingVertical = 'FIXED';
       }
     }
   }
@@ -774,11 +793,52 @@ interface BuildResult {
 
 async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>): Promise<BuildResult | null> {
   const styles = resolveClasses(element.classes, customColors);
+
+  // Font Awesome icon detection
+  const hasFa = element.classes.includes('fa') || element.classes.includes('fas') || element.classes.includes('far') || element.classes.includes('fab');
+  if (hasFa) {
+    // Extract icon name from classes like fa-search, fa-home, etc.
+    const iconClass = element.classes.find(c => c.startsWith('fa-') && c !== 'fa-solid' && c !== 'fa-regular' && c !== 'fa-brands');
+    if (iconClass) {
+      const iconName = iconClass.slice(3); // Remove 'fa-' prefix
+      try {
+        // Determine icon style (solid, regular, brands)
+        let iconStyle = 'solid';
+        if (element.classes.includes('far')) iconStyle = 'regular';
+        if (element.classes.includes('fab')) iconStyle = 'brands';
+
+        const svgUrl = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/${iconStyle}/${iconName}.svg`;
+        const response = await fetch(svgUrl);
+        if (response.ok) {
+          let svgContent = await response.text();
+
+          // Apply color to SVG if text color is specified
+          if (styles.textColor) {
+            const hexColor = `#${Math.round(styles.textColor.r * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.g * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.b * 255).toString(16).padStart(2, '0')}`;
+            svgContent = svgContent.replace('<path', `<path fill="${hexColor}"`);
+          }
+
+          const svgNode = figma.createNodeFromSvg(svgContent);
+          svgNode.name = `fa-${iconName}`;
+
+          // Apply sizing
+          const size = styles.fontSize || 16;
+          svgNode.resize(size, size);
+
+          return { node: svgNode, styles };
+        }
+      } catch (e) {
+        console.error('Failed to fetch Font Awesome icon:', e);
+      }
+    }
+  }
+
   const isTextElement = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'label', 'strong', 'em', 'b', 'i'].includes(element.tagName);
   const hasOnlyText = element.children.length === 0 && element.textContent.trim();
 
   // Text-only elements
   if (isTextElement && hasOnlyText) {
+
     const text = figma.createText();
 
     // Load font
@@ -812,6 +872,7 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
   // Container elements - create frame
   const frame = figma.createFrame();
+  frame.resize(frame.width, 1); // Set default height to 1 instead of 100
 
   // Clean frame name: tag + meaningful classes (exclude utilities)
   const meaningfulClasses = element.classes.filter(c =>
@@ -838,7 +899,18 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
   }
 
   // Apply Auto Layout Properties
-  if (styles.gap !== undefined) frame.itemSpacing = styles.gap;
+  if (frame.layoutMode === 'HORIZONTAL') {
+    frame.itemSpacing = styles.gapX ?? styles.gap ?? 0;
+    if (styles.flexWrap === 'WRAP') {
+      frame.counterAxisSpacing = styles.gapY ?? styles.gap ?? 0;
+    }
+  } else if (frame.layoutMode === 'VERTICAL') {
+    frame.itemSpacing = styles.gapY ?? styles.gap ?? 0;
+    if (styles.flexWrap === 'WRAP') {
+      frame.counterAxisSpacing = styles.gapX ?? styles.gap ?? 0;
+    }
+  }
+
   if (styles.paddingTop !== undefined) frame.paddingTop = styles.paddingTop;
   if (styles.paddingRight !== undefined) frame.paddingRight = styles.paddingRight;
   if (styles.paddingBottom !== undefined) frame.paddingBottom = styles.paddingBottom;
