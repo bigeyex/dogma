@@ -277,7 +277,7 @@ function parseHTML(html: string): ParsedElement[] {
 
 interface ResolvedStyles {
   // Layout
-  display?: 'flex' | 'block';
+  display?: 'flex' | 'block' | 'grid';
   flexDirection?: 'HORIZONTAL' | 'VERTICAL';
   justifyContent?: 'MIN' | 'CENTER' | 'MAX' | 'SPACE_BETWEEN';
   alignItems?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH';
@@ -286,6 +286,8 @@ interface ResolvedStyles {
   gapY?: number;
   flexWrap?: 'WRAP' | 'NO_WRAP';
   flexGrow?: number;
+  flexShrink?: number;
+  gridCols?: number;
 
   // Sizing
   width?: number | 'FILL' | 'HUG';
@@ -303,6 +305,7 @@ interface ResolvedStyles {
 
   // Colors
   backgroundColor?: RGB;
+  backgroundOpacity?: number;
   textColor?: RGB;
   borderColor?: RGB;
 
@@ -318,11 +321,15 @@ interface ResolvedStyles {
   fontSize?: number;
   lineHeight?: number;
   fontWeight?: string;
+  fontFamily?: 'sans' | 'serif' | 'mono';
   textAlign?: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED';
+  whiteSpace?: 'nowrap' | 'normal';
 
   // Effects
   shadows?: DropShadowEffect[];
   opacity?: number;
+  overflow?: 'hidden' | 'visible';
+  objectFit?: 'cover' | 'contain' | 'fill';
 
   // Margins
   marginTop?: number;
@@ -330,6 +337,7 @@ interface ResolvedStyles {
   marginBottom?: number;
   marginLeft?: number;
 }
+
 
 function resolveClasses(classes: string[], customColors: Record<string, string>): ResolvedStyles {
   const styles: ResolvedStyles = {};
@@ -524,12 +532,25 @@ function resolveClasses(classes: string[], customColors: Record<string, string>)
       }
     }
 
-    // Background color
+    // Background color (with optional opacity like bg-secondary/30)
     else if (cls.startsWith('bg-')) {
-      const colorName = cls.slice(3);
-      const color = parseColor(colorName, customColors);
-      if (color) styles.backgroundColor = color;
+      const colorPart = cls.slice(3);
+      // Check for opacity notation
+      const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
+      if (opacityMatch) {
+        const colorName = opacityMatch[1];
+        const opacityValue = parseInt(opacityMatch[2]) / 100;
+        const color = parseColor(colorName, customColors);
+        if (color) {
+          styles.backgroundColor = color;
+          styles.backgroundOpacity = opacityValue;
+        }
+      } else {
+        const color = parseColor(colorPart, customColors);
+        if (color) styles.backgroundColor = color;
+      }
     }
+
 
     // Text color
     else if (cls.startsWith('text-') && !cls.startsWith('text-left') && !cls.startsWith('text-center') && !cls.startsWith('text-right')) {
@@ -661,7 +682,88 @@ function resolveClasses(classes: string[], customColors: Record<string, string>)
         styles.opacity = value / 100;
       }
     }
+
+    // Grid layout
+    else if (cls === 'grid') {
+      styles.display = 'grid';
+      styles.flexWrap = 'WRAP';
+    }
+    else if (cls.startsWith('grid-cols-')) {
+      const cols = parseInt(cls.slice(10));
+      if (!isNaN(cols)) {
+        styles.gridCols = cols;
+      }
+    }
+
+    // Justify around (approximate with space-between)
+    else if (cls === 'justify-around') {
+      styles.justifyContent = 'SPACE_BETWEEN';
+    }
+
+    // Flex shrink
+    else if (cls === 'flex-shrink-0') {
+      styles.flexShrink = 0;
+    }
+    else if (cls === 'flex-shrink') {
+      styles.flexShrink = 1;
+    }
+
+    // Overflow
+    else if (cls === 'overflow-hidden') {
+      styles.overflow = 'hidden';
+    }
+    else if (cls === 'overflow-visible' || cls === 'overflow-auto' || cls === 'overflow-x-auto' || cls === 'overflow-y-auto') {
+      styles.overflow = 'visible';
+    }
+
+    // Object fit
+    else if (cls === 'object-cover') {
+      styles.objectFit = 'cover';
+    }
+    else if (cls === 'object-contain') {
+      styles.objectFit = 'contain';
+    }
+    else if (cls === 'object-fill') {
+      styles.objectFit = 'fill';
+    }
+
+    // Whitespace
+    else if (cls === 'whitespace-nowrap') {
+      styles.whiteSpace = 'nowrap';
+    }
+    else if (cls === 'whitespace-normal') {
+      styles.whiteSpace = 'normal';
+    }
+
+    // Line height variants
+    else if (cls === 'leading-relaxed') {
+      styles.lineHeight = 1.625 * (styles.fontSize || 16);
+    }
+    else if (cls === 'leading-loose') {
+      styles.lineHeight = 2 * (styles.fontSize || 16);
+    }
+    else if (cls === 'leading-tight') {
+      styles.lineHeight = 1.25 * (styles.fontSize || 16);
+    }
+    else if (cls === 'leading-snug') {
+      styles.lineHeight = 1.375 * (styles.fontSize || 16);
+    }
+    else if (cls === 'leading-normal') {
+      styles.lineHeight = 1.5 * (styles.fontSize || 16);
+    }
+
+    // Font family
+    else if (cls === 'font-serif') {
+      styles.fontFamily = 'serif';
+    }
+    else if (cls === 'font-sans') {
+      styles.fontFamily = 'sans';
+    }
+    else if (cls === 'font-mono') {
+      styles.fontFamily = 'mono';
+    }
   }
+
 
   return styles;
 }
@@ -930,15 +1032,22 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     frame.counterAxisAlignItems = 'MIN';
   }
 
-  // Wrap
-  if (styles.flexWrap === 'WRAP') {
+  // Wrap (also used for grid simulation)
+  if (styles.flexWrap === 'WRAP' || styles.display === 'grid') {
     frame.layoutWrap = 'WRAP';
   }
 
-  // Background color
+  // Background color (with optional opacity)
   if (styles.backgroundColor) {
-    frame.fills = [{ type: 'SOLID', color: styles.backgroundColor }];
+    const opacity = styles.backgroundOpacity ?? 1;
+    frame.fills = [{ type: 'SOLID', color: styles.backgroundColor, opacity }];
   }
+
+  // Overflow hidden
+  if (styles.overflow === 'hidden') {
+    frame.clipsContent = true;
+  }
+
 
   // Border
   if (styles.borderWidth) {
