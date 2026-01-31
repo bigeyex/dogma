@@ -828,8 +828,11 @@ function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, parentL
       node.resize(node.width, styles.height);
       node.layoutSizingVertical = 'FIXED';
     } else {
-      // Default Height: 1 instead of Figma's 100 default
-      if (node.type === 'FRAME' && node.layoutMode !== 'NONE') {
+      // Default Height: 1 instead of Figma's 100 default for non-layout containers
+      if (node.type === 'TEXT') {
+        // Text nodes should always hug their content height by default
+        node.layoutSizingVertical = 'HUG';
+      } else if (node.type === 'FRAME' && node.layoutMode !== 'NONE') {
         node.layoutSizingVertical = 'HUG';
       } else {
         node.resize(node.width, 1);
@@ -893,7 +896,7 @@ interface BuildResult {
   styles: ResolvedStyles;
 }
 
-async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>): Promise<BuildResult | null> {
+async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>): Promise<BuildResult | null> {
   const styles = resolveClasses(element.classes, customColors);
 
   // Font Awesome icon detection
@@ -903,34 +906,40 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     const iconClass = element.classes.find(c => c.startsWith('fa-') && c !== 'fa-solid' && c !== 'fa-regular' && c !== 'fa-brands');
     if (iconClass) {
       const iconName = iconClass.slice(3); // Remove 'fa-' prefix
-      try {
-        // Determine icon style (solid, regular, brands)
-        let iconStyle = 'solid';
-        if (element.classes.includes('far')) iconStyle = 'regular';
-        if (element.classes.includes('fab')) iconStyle = 'brands';
 
-        const svgUrl = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/${iconStyle}/${iconName}.svg`;
-        const response = await fetch(svgUrl);
-        if (response.ok) {
-          let svgContent = await response.text();
+      // Determine icon style (solid, regular, brands, etc.)
+      let iconStyle = 'solid';
+      if (element.classes.includes('far') || element.classes.includes('fa-regular')) iconStyle = 'regular';
+      else if (element.classes.includes('fab') || element.classes.includes('fa-brands')) iconStyle = 'brands';
+      else if (element.classes.includes('fal') || element.classes.includes('fa-light')) iconStyle = 'light';
+      else if (element.classes.includes('fat') || element.classes.includes('fa-thin')) iconStyle = 'thin';
 
-          // Apply color to SVG if text color is specified
-          if (styles.textColor) {
-            const hexColor = `#${Math.round(styles.textColor.r * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.g * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.b * 255).toString(16).padStart(2, '0')}`;
-            svgContent = svgContent.replace('<path', `<path fill="${hexColor}"`);
-          }
+      const iconKey = `${iconStyle}/${iconName}`;
+      let svgContent = iconMap[iconKey];
 
-          const svgNode = figma.createNodeFromSvg(svgContent);
-          svgNode.name = `fa-${iconName}`;
-
-          // Apply sizing
-          const size = styles.fontSize || 16;
-          svgNode.resize(size, size);
-
-          return { node: svgNode, styles };
+      if (svgContent) {
+        // Apply color to SVG if text color is specified
+        if (styles.textColor) {
+          const hexColor = `#${Math.round(styles.textColor.r * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.g * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.b * 255).toString(16).padStart(2, '0')}`;
+          // Replace all occurrences of <path to ensure multi-path icons are colored
+          svgContent = svgContent.replace(/<path/g, `<path fill="${hexColor}"`);
+          // Also handle cases where fill might already exist
+          svgContent = svgContent.replace(/fill="[^"]*"/g, `fill="${hexColor}"`);
         }
-      } catch (e) {
-        console.error('Failed to fetch Font Awesome icon:', e);
+
+        const svgNode = figma.createNodeFromSvg(svgContent);
+        svgNode.name = `fa-${iconName}`;
+
+        // Apply sizing - use fontSize from text- classes if available, otherwise default
+        const size = styles.fontSize || 16;
+        svgNode.resize(size, size);
+
+        // Crucial: Set styles.width and styles.height to match icon size
+        // This prevents applySizingConstraints from overriding the size to 1px
+        styles.width = size;
+        styles.height = size;
+
+        return { node: svgNode, styles };
       }
     }
   }
@@ -995,6 +1004,8 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
   // This helps ensure most containers behave like blocks
   if (styles.display === 'flex') {
     frame.layoutMode = styles.flexDirection || 'HORIZONTAL'; // Default flex is row in Tailwind
+  } else if (styles.display === 'grid') {
+    frame.layoutMode = 'HORIZONTAL'; // Grid simulation requires horizontal wrapping
   } else {
     // Default block behavior = vertical auto layout
     frame.layoutMode = 'VERTICAL';
@@ -1033,7 +1044,7 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
   }
 
   // Wrap (also used for grid simulation)
-  if (styles.flexWrap === 'WRAP' || styles.display === 'grid') {
+  if ((styles.flexWrap === 'WRAP' || styles.display === 'grid') && frame.layoutMode === 'HORIZONTAL') {
     frame.layoutWrap = 'WRAP';
   }
 
@@ -1115,7 +1126,7 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
   // Build children recursively
   for (const child of element.children) {
-    const childResult = await buildFigmaNode(child, customColors);
+    const childResult = await buildFigmaNode(child, customColors, iconMap);
     if (childResult) {
       frame.appendChild(childResult.node);
 
@@ -1142,7 +1153,7 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
 figma.showUI(__html__, { width: 400, height: 560 });
 
-figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: string }) => {
+figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: string; icons?: Record<string, string> }) => {
   if (msg.type === 'cancel') {
     figma.closePlugin();
     return;
@@ -1150,6 +1161,7 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
 
   if (msg.type === 'convert-html' && msg.html) {
     try {
+      const iconMap = msg.icons || {};
       // Parse tailwind config for custom colors
       const customColors = parseTailwindConfig(msg.html);
 
@@ -1224,7 +1236,7 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
       figma.currentPage.appendChild(artboard);
 
       for (const element of targetElements) {
-        const result = await buildFigmaNode(element, customColors);
+        const result = await buildFigmaNode(element, customColors, iconMap);
         if (result) {
           artboard.appendChild(result.node);
           nodes.push(result.node);

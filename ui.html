@@ -187,22 +187,62 @@
     <button id="cancel">Cancel</button>
   </div>
 
-  <div class="supported">
-    <h3>Supported</h3>
-    <ul>
-      <li>Layout: flex, flex-col, gap-*, p-*, m-*</li>
-      <li>Sizing: w-*, h-*, min/max-*</li>
-      <li>Visual: bg-*, text-*, border-*, rounded-*, shadow-*</li>
-      <li>Typography: text-*, font-*</li>
-    </ul>
-  </div>
+
 
   <script>
-    document.getElementById('convert').onclick = () => {
+    document.getElementById('convert').onclick = async () => {
       const textarea = document.getElementById('html-input');
       const html = textarea.value;
       const viewport = document.querySelector('input[name="viewport"]:checked').value;
-      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport } }, '*');
+
+      // Scan for Font Awesome icons
+      const iconMap = {};
+      // Match anything that looks like a Font Awesome icon class: fa, fas, far, fab, fa-something
+      const faRegex = /class=["']([^"']*\bfa[-a-z0-9]*\b[^"']*)["']/g;
+      const matches = [...html.matchAll(faRegex)];
+
+      const fetchIcon = async (className) => {
+        // Determine style
+        let style = 'solid';
+        if (className.includes('far') || className.includes('fa-regular')) style = 'regular';
+        else if (className.includes('fab') || className.includes('fa-brands')) style = 'brands';
+        else if (className.includes('fal') || className.includes('fa-light')) style = 'light';
+        else if (className.includes('fat') || className.includes('fa-thin')) style = 'thin';
+
+        // Extract all fa-icon-name classes
+        const iconMatches = className.matchAll(/\bfa-([a-z0-9-]+)\b/g);
+        for (const iconMatch of iconMatches) {
+          const iconName = iconMatch[1];
+          // Skip utility classes
+          if (['solid', 'regular', 'brands', 'light', 'thin', 'duotone', 'xs', 'sm', 'lg', 'xl', '2xl', 'fw', '2xs', '3x', '4x', '5x', '6x', '7x', '8x', '9x', '10x'].includes(iconName)) continue;
+
+          const key = `${style}/${iconName}`;
+          if (iconMap[key]) continue;
+
+          try {
+            // Using 6.x branch as suggested by research
+            const url = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/${style}/${iconName}.svg`;
+            const response = await fetch(url);
+            if (response.ok) {
+              iconMap[key] = await response.text();
+            } else if (style !== 'solid') {
+              // Fallback to solid if regular/light fails
+              const fallbackUrl = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/${iconName}.svg`;
+              const fallbackRes = await fetch(fallbackUrl);
+              if (fallbackRes.ok) {
+                iconMap[key] = await fallbackRes.text();
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to fetch icon ${key}:`, e);
+          }
+        }
+      };
+
+      const iconPromises = matches.map(match => fetchIcon(match[1]));
+      await Promise.all(iconPromises);
+
+      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
     };
 
     document.getElementById('cancel').onclick = () => {
