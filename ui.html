@@ -13,8 +13,47 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #1a1a2e;
       color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: #121225;
+      padding: 0 8px;
+      border-bottom: 1px solid #333;
+    }
+
+    .tab {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #888;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: #ccc;
+    }
+
+    .tab.active {
+      color: #fff;
+      border-bottom-color: #3b82f6;
+    }
+
+    .tab-content {
+      flex: 1;
       padding: 16px;
-      min-height: 100vh;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
     }
 
     h2 {
@@ -31,27 +70,47 @@
       line-height: 1.4;
     }
 
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    select,
     textarea {
       width: 100%;
-      height: 240px;
       background: #0f0f1a;
       border: 1px solid #333;
       border-radius: 8px;
       color: #e0e0e0;
-      font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 11px;
-      padding: 12px;
-      resize: vertical;
+      font-size: 12px;
+      padding: 10px;
       outline: none;
       transition: border-color 0.2s;
     }
 
-    textarea:focus {
-      border-color: #3b82f6;
+    textarea {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      resize: vertical;
+      min-height: 120px;
     }
 
-    textarea::placeholder {
-      color: #555;
+    textarea#html-input {
+      height: 200px;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #3b82f6;
     }
 
     .controls {
@@ -91,7 +150,7 @@
       font-weight: 500;
     }
 
-    .buttons {
+    .btn-group {
       display: flex;
       gap: 8px;
       margin-top: 12px;
@@ -106,146 +165,437 @@
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
 
-    #convert {
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       color: white;
     }
 
-    #convert:hover {
+    .btn-primary:hover:not(:disabled) {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
 
-    #cancel {
+    .btn-secondary {
       background: #333;
       color: #ccc;
     }
 
-    #cancel:hover {
+    .btn-secondary:hover:not(:disabled) {
       background: #444;
     }
 
-    .supported {
-      margin-top: 16px;
-      padding: 12px;
-      background: #0f0f1a;
-      border-radius: 6px;
-      font-size: 11px;
-    }
-
-    .supported h3 {
+    .status {
+      margin-top: 12px;
       font-size: 11px;
       color: #888;
-      margin-bottom: 6px;
-      font-weight: 500;
+      text-align: center;
+      min-height: 1.2em;
     }
 
-    .supported ul {
-      list-style: none;
+    .thinking-container {
+      display: none;
+      background: #0f0f1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-top: 12px;
+      position: relative;
+      overflow: hidden;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .thinking-container.active {
       display: flex;
-      flex-wrap: wrap;
-      gap: 4px 8px;
     }
 
-    .supported li {
-      color: #666;
-      font-size: 10px;
-    }
-
-    .tag {
-      display: inline-block;
-      padding: 2px 6px;
-      background: #252538;
-      border-radius: 4px;
+    .thinking-line {
+      flex: 1;
+      font-size: 11px;
+      color: #3b82f6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-family: monospace;
-      color: #8b5cf6;
+    }
+
+    .stop-link {
+      color: #ef4444;
+      font-size: 11px;
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: 500;
+      white-space: nowrap;
+      background: #0f0f1a;
+      padding-left: 8px;
+    }
+
+    .stop-link:hover {
+      text-decoration: underline;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    button.loading .spinner {
+      display: block;
     }
   </style>
 </head>
 
 <body>
-  <h2>Tailwind HTML → Figma</h2>
-  <p class="description">Paste HTML with Tailwind classes. Supports <span class="tag">tailwind.config</span>.</p>
+  <div class="tabs">
+    <div class="tab active" data-tab="builder">Builder</div>
+    <div class="tab" data-tab="tailwind">Tailwind</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
 
-  <div class="controls">
-    <div class="toggle-group">
-      <input type="radio" id="mobile" name="viewport" value="mobile" checked>
-      <label for="mobile">📱 Mobile (375px)</label>
+  <!-- Builder Tab -->
+  <div id="builder-tab" class="tab-content active">
+    <h2>AI Builder</h2>
+    <p class="description">AI will generate Tailwind HTML based on your prompt.</p>
 
-      <input type="radio" id="desktop" name="viewport" value="desktop">
-      <label for="desktop">🖥️ Desktop (1440px)</label>
+    <div class="form-group">
+      <textarea id="prompt-input"
+        placeholder="e.g. A premium landing page hero section with a dark theme, a vibrant call-to-action button, and a feature list."></textarea>
+    </div>
+
+    <div class="controls">
+      <div class="toggle-group">
+        <input type="radio" id="builder-mobile" name="builder-viewport" value="mobile" checked>
+        <label for="builder-mobile">📱 Mobile</label>
+
+        <input type="radio" id="builder-desktop" name="builder-viewport" value="desktop">
+        <label for="builder-desktop">🖥️ Desktop</label>
+      </div>
+    </div>
+
+    <button id="build-btn" class="btn-primary">
+      <span class="spinner"></span>
+      Build in Figma
+    </button>
+    <div id="builder-status" class="status"></div>
+
+    <div id="thinking-container" class="thinking-container">
+      <div id="thinking-line" class="thinking-line"></div>
+      <a id="stop-btn" class="stop-link">Stop</a>
     </div>
   </div>
 
-  <textarea id="html-input"
-    placeholder="<div class=&quot;flex flex-col gap-4 p-6 bg-gray-900&quot;>...</div>"></textarea>
+  <!-- Tailwind Tab -->
+  <div id="tailwind-tab" class="tab-content">
+    <h2>Tailwind → Figma</h2>
+    <p class="description">Convert existing Tailwind HTML to Figma layers.</p>
 
-  <div class="buttons">
-    <button id="convert">Convert to Figma</button>
-    <button id="cancel">Cancel</button>
+    <div class="controls">
+      <div class="toggle-group">
+        <input type="radio" id="mobile" name="viewport" value="mobile" checked>
+        <label for="mobile">📱 Mobile</label>
+
+        <input type="radio" id="desktop" name="viewport" value="desktop">
+        <label for="desktop">🖥️ Desktop</label>
+      </div>
+    </div>
+
+    <textarea id="html-input"
+      placeholder="<div class=&quot;flex flex-col gap-4 p-6 bg-gray-900&quot;>...</div>"></textarea>
+
+    <div class="btn-group">
+      <button id="convert" class="btn-primary">Convert</button>
+      <button id="cancel-tailwind" class="btn-secondary">Cancel</button>
+    </div>
+    <div id="tailwind-status" class="status"></div>
   </div>
 
+  <!-- Settings Tab -->
+  <div id="settings-tab" class="tab-content">
+    <h2>Settings</h2>
+    <p class="description">Configure your VolcEngine Ark credentials.</p>
 
+    <div class="form-group">
+      <label>Provider</label>
+      <select id="provider">
+        <option value="volcengine">VolcEngine (Ark)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Model ID (Endpoint ID)</label>
+      <input type="text" id="model-id" placeholder="doubao-seed-1-8-251228" value="doubao-seed-1-8-251228">
+    </div>
+
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="api-key" placeholder="Enter your API key">
+    </div>
+
+    <div class="btn-group">
+      <button id="save-settings" class="btn-primary">Save Settings</button>
+    </div>
+    <div id="settings-status" class="status"></div>
+  </div>
 
   <script>
-    document.getElementById('convert').onclick = async () => {
-      const textarea = document.getElementById('html-input');
-      const html = textarea.value;
-      const viewport = document.querySelector('input[name="viewport"]:checked').value;
+    // Tab Switching
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
 
-      // Scan for Font Awesome icons
+    tabs.forEach(tab => {
+      tab.onclick = () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+      };
+    });
+
+    // Settings logic
+    let settings = {
+      provider: 'volcengine',
+      modelId: 'doubao-seed-1-8-251228',
+      apiKey: ''
+    };
+
+    document.getElementById('save-settings').onclick = () => {
+      settings.provider = document.getElementById('provider').value;
+      settings.modelId = document.getElementById('model-id').value;
+      settings.apiKey = document.getElementById('api-key').value;
+
+      parent.postMessage({ pluginMessage: { type: 'save-settings', settings } }, '*');
+      document.getElementById('settings-status').textContent = '✓ Settings saved';
+      setTimeout(() => { document.getElementById('settings-status').textContent = ''; }, 2000);
+    };
+
+    // Load initial settings
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === 'load-settings' && msg.settings) {
+        settings = msg.settings;
+        document.getElementById('provider').value = settings.provider || 'volcengine';
+        document.getElementById('model-id').value = settings.modelId || 'doubao-seed-1-8-251228';
+        document.getElementById('api-key').value = settings.apiKey || '';
+      }
+    };
+
+    // Get Font Awesome icons from HTML
+    const getIconsMap = async (html) => {
       const iconMap = {};
-      // Match anything that looks like a Font Awesome icon class: fa, fas, far, fab, fa-something
+      // Matches class="... fa fa-icon ..." or class="... fa-icon ..."
       const faRegex = /class=["']([^"']*\bfa[-a-z0-9]*\b[^"']*)["']/g;
       const matches = [...html.matchAll(faRegex)];
 
       const fetchIcon = async (className) => {
-        // Determine style
-        let style = 'solid';
-        if (className.includes('far') || className.includes('fa-regular')) style = 'regular';
-        else if (className.includes('fab') || className.includes('fa-brands')) style = 'brands';
-        else if (className.includes('fal') || className.includes('fa-light')) style = 'light';
-        else if (className.includes('fat') || className.includes('fa-thin')) style = 'thin';
+        // Default to FA4 style if no modern style prefixes are found
+        let version = "4.7.0";
+        let style = "solid";
 
-        // Extract all fa-icon-name classes
+        if (className.includes('fa-solid') || className.includes('fas')) { style = 'solid'; version = '6.x'; }
+        else if (className.includes('fa-regular') || className.includes('far')) { style = 'regular'; version = '6.x'; }
+        else if (className.includes('fa-brands') || className.includes('fab')) { style = 'brands'; version = '6.x'; }
+        else if (className.includes('fa-light') || className.includes('fal')) { style = 'light'; version = '6.x'; }
+        else if (className.includes('fa-thin') || className.includes('fat')) { style = 'thin'; version = '6.x'; }
+
         const iconMatches = className.matchAll(/\bfa-([a-z0-9-]+)\b/g);
         for (const iconMatch of iconMatches) {
           const iconName = iconMatch[1];
-          // Skip utility classes
-          if (['solid', 'regular', 'brands', 'light', 'thin', 'duotone', 'xs', 'sm', 'lg', 'xl', '2xl', 'fw', '2xs', '3x', '4x', '5x', '6x', '7x', '8x', '9x', '10x'].includes(iconName)) continue;
+          // Filter out utility classes
+          if (['fa', 'solid', 'regular', 'brands', 'light', 'thin', 'duotone', 'xs', 'sm', 'lg', 'xl', '2xl', 'fw', '2xs', '3x', '4x', '5x', '6x', '7x', '8x', '9x', '10x', 'spin', 'pulse', 'stack', 'inverse'].includes(iconName)) continue;
 
-          const key = `${style}/${iconName}`;
+          const key = version === '4.7.0' ? `fa4/${iconName}` : `${style}/${iconName}`;
           if (iconMap[key]) continue;
 
           try {
-            // Using 6.x branch as suggested by research
-            const url = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/${style}/${iconName}.svg`;
+            let url;
+            if (version === '4.7.0') {
+              url = `https://raw.githubusercontent.com/encharm/font-awesome-svg-png/master/black/svg/${iconName}.svg`;
+            } else {
+              url = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/${style}/${iconName}.svg`;
+            }
+
             const response = await fetch(url);
             if (response.ok) {
               iconMap[key] = await response.text();
-            } else if (style !== 'solid') {
-              // Fallback to solid if regular/light fails
+            } else if (version === '6.x' && style !== 'solid') {
+              // Fallback to solid for FA6
+              const fallbackUrl = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/${iconName}.svg`;
+              const fallbackRes = await fetch(fallbackUrl);
+              if (fallbackRes.ok) {
+                iconMap[key] = await fallbackRes.text();
+              }
+            } else if (version === '4.7.0') {
+              // Compatibility: If FA4 search fails, try FA6 solid
               const fallbackUrl = `https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/${iconName}.svg`;
               const fallbackRes = await fetch(fallbackUrl);
               if (fallbackRes.ok) {
                 iconMap[key] = await fallbackRes.text();
               }
             }
-          } catch (e) {
-            console.error(`Failed to fetch icon ${key}:`, e);
-          }
+          } catch (e) { console.error(e); }
         }
       };
 
-      const iconPromises = matches.map(match => fetchIcon(match[1]));
-      await Promise.all(iconPromises);
-
-      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
+      await Promise.all(matches.map(match => fetchIcon(match[1])));
+      return iconMap;
     };
 
-    document.getElementById('cancel').onclick = () => {
+    // Conversion logic
+    document.getElementById('convert').onclick = async () => {
+      const html = document.getElementById('html-input').value;
+      const viewport = document.querySelector('input[name="viewport"]:checked').value;
+      const status = document.getElementById('tailwind-status');
+
+      if (!html) return;
+      status.textContent = 'Processing icons...';
+      const iconMap = await getIconsMap(html);
+
+      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
+      status.textContent = '✓ Sent to Figma';
+      setTimeout(() => { status.textContent = ''; }, 2000);
+    };
+
+    // AI Builder logic
+    let abortController = null;
+
+    document.getElementById('stop-btn').onclick = () => {
+      if (abortController) {
+        abortController.abort();
+      }
+    };
+
+    document.getElementById('build-btn').onclick = async () => {
+      const prompt = document.getElementById('prompt-input').value;
+      const viewport = document.querySelector('input[name="builder-viewport"]:checked').value;
+      const btn = document.getElementById('build-btn');
+      const status = document.getElementById('builder-status');
+      const thinkingContainer = document.getElementById('thinking-container');
+      const thinkingLine = document.getElementById('thinking-line');
+
+      if (!prompt) {
+        status.textContent = 'Please enter a description.';
+        return;
+      }
+      if (!settings.apiKey) {
+        status.textContent = 'Please set API Key in Settings tab.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.classList.add('loading');
+      status.textContent = '';
+      thinkingContainer.classList.add('active');
+      thinkingLine.textContent = 'Contacting AI...';
+
+      abortController = new AbortController();
+
+      try {
+        const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+          method: 'POST',
+          signal: abortController.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.apiKey}`
+          },
+          body: JSON.stringify({
+            model: settings.modelId,
+            stream: true,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look.'
+              },
+              { role: 'user', content: prompt }
+            ]
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error?.message || 'API request failed');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullHtml = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.trim().startsWith('data: ')) {
+              const dataText = line.trim().slice(6);
+              if (dataText === '[DONE]') continue;
+
+              try {
+                const data = JSON.parse(dataText);
+                const delta = data.choices[0].delta;
+
+                if (delta.reasoning_content) {
+                  thinkingLine.textContent = delta.reasoning_content;
+                } else if (delta.content) {
+                  fullHtml += delta.content;
+                  thinkingLine.textContent = delta.content;
+                }
+              } catch (e) {
+                console.warn('Failed to parse chunk:', dataText);
+              }
+            }
+          }
+        }
+
+        let html = fullHtml.trim();
+        html = html.replace(/^```html\n?/, '').replace(/\n?```$/, ''); // fallback cleanup
+
+        thinkingLine.textContent = 'Processing icons...';
+        const iconMap = await getIconsMap(html);
+
+        status.textContent = 'Building Figma layers...';
+        parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
+        status.textContent = '✓ Build complete!';
+
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          status.textContent = 'Generation stopped by user.';
+        } else {
+          status.textContent = `Error: ${err.message}`;
+        }
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        thinkingContainer.classList.remove('active');
+        abortController = null;
+      }
+    };
+
+    document.getElementById('cancel-tailwind').onclick = () => {
       parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
     };
   </script>

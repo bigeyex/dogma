@@ -907,15 +907,27 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     if (iconClass) {
       const iconName = iconClass.slice(3); // Remove 'fa-' prefix
 
-      // Determine icon style (solid, regular, brands, etc.)
-      let iconStyle = 'solid';
-      if (element.classes.includes('far') || element.classes.includes('fa-regular')) iconStyle = 'regular';
+      // Determine icon style
+      let iconStyle = 'fa4'; // Default to FA4 style
+      if (element.classes.includes('fas') || element.classes.includes('fa-solid')) iconStyle = 'solid';
+      else if (element.classes.includes('far') || element.classes.includes('fa-regular')) iconStyle = 'regular';
       else if (element.classes.includes('fab') || element.classes.includes('fa-brands')) iconStyle = 'brands';
       else if (element.classes.includes('fal') || element.classes.includes('fa-light')) iconStyle = 'light';
       else if (element.classes.includes('fat') || element.classes.includes('fa-thin')) iconStyle = 'thin';
 
-      const iconKey = `${iconStyle}/${iconName}`;
+      let iconKey = `${iconStyle}/${iconName}`;
       let svgContent = iconMap[iconKey];
+
+      // Fallback: If not found, try fa4 or solid as alternate prefixes
+      if (!svgContent) {
+        const fallbackKeys = [`fa4/${iconName}`, `solid/${iconName}`, `regular/${iconName}`, `brands/${iconName}`];
+        for (const k of fallbackKeys) {
+          if (iconMap[k]) {
+            svgContent = iconMap[k];
+            break;
+          }
+        }
+      }
 
       if (svgContent) {
         // Apply color to SVG if text color is specified
@@ -952,11 +964,13 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
     const text = figma.createText();
 
-    // Load font
-    const fontWeight = styles.fontWeight || 'Regular';
+    // Load font with fallback
+    let fontWeight = styles.fontWeight || 'Regular';
     try {
       await figma.loadFontAsync({ family: 'Inter', style: fontWeight });
-    } catch {
+    } catch (e) {
+      console.warn(`Failed to load Inter ${fontWeight}, falling back to Regular`, e);
+      fontWeight = 'Regular';
       await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
     }
 
@@ -1153,9 +1167,21 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
 figma.showUI(__html__, { width: 400, height: 560 });
 
-figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: string; icons?: Record<string, string> }) => {
+// Handle initial settings load
+figma.clientStorage.getAsync('llm-settings').then(settings => {
+  if (settings) {
+    figma.ui.postMessage({ type: 'load-settings', settings });
+  }
+});
+
+figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: string; icons?: Record<string, string>; settings?: any }) => {
   if (msg.type === 'cancel') {
     figma.closePlugin();
+    return;
+  }
+
+  if (msg.type === 'save-settings' && msg.settings) {
+    await figma.clientStorage.setAsync('llm-settings', msg.settings);
     return;
   }
 
