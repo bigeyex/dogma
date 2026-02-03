@@ -896,7 +896,7 @@ interface BuildResult {
   styles: ResolvedStyles;
 }
 
-async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>): Promise<BuildResult | null> {
+async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>, availableWidth?: number, screenWidth?: number): Promise<BuildResult | null> {
   const styles = resolveClasses(element.classes, customColors);
 
   // Font Awesome icon detection
@@ -1006,7 +1006,7 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     !c.startsWith('w-') && !c.startsWith('h-') && !c.startsWith('min-') && !c.startsWith('max-') &&
     !c.startsWith('flex-') && !c.startsWith('gap-') && !c.startsWith('bg-') && !c.startsWith('text-') &&
     !c.startsWith('rounded-') && !c.startsWith('border-') && !c.startsWith('shadow-') &&
-    !['flex', 'container', 'items-center', 'justify-between'].includes(c)
+    !['flex', 'container', 'items-center', 'justify-between', 'justify-around'].includes(c)
   );
 
   frame.name = element.tagName + (meaningfulClasses.length ? '.' + meaningfulClasses.slice(0, 2).join('.') : '');
@@ -1138,15 +1138,85 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     frame.appendChild(placeholderText);
   }
 
+  // CALCULATE RESOLVED WIDTH FOR CHILDREN
+  let resolvedWidth: number | undefined;
+  if (typeof styles.width === 'number') {
+    resolvedWidth = styles.width;
+  } else if (styles.width === 'FILL') {
+    resolvedWidth = availableWidth; // If parent has width, fill implies we take it
+  }
+  // Adjust for padding if we resolved a width
+  let innerWidth = resolvedWidth;
+  if (innerWidth !== undefined) {
+    const pl = styles.paddingLeft || 0;
+    const pr = styles.paddingRight || 0;
+    const border = styles.borderWidth || 0;
+    innerWidth = innerWidth - pl - pr - (border * 2);
+  }
+
   // Build children recursively
   for (const child of element.children) {
-    const childResult = await buildFigmaNode(child, customColors, iconMap);
+    const childResult = await buildFigmaNode(child, customColors, iconMap, innerWidth, screenWidth);
     if (childResult) {
       frame.appendChild(childResult.node);
 
       // Now that child is inside frame, we can apply constraints based on frame's layout mode
       applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode);
       applyLayoutConstraints(childResult.node, childResult.styles, frame.layoutMode);
+    }
+  }
+
+  // JUSTIFY-AROUND LOGIC (Post-Children)
+  // If we have justify-around, we need to manually offset padding L/R to simulate it
+  // because Figma only supports Packed, Space Between.
+  if (element.classes.includes('justify-around') &&
+    frame.layoutMode === 'HORIZONTAL' &&
+    frame.layoutWrap === 'NO_WRAP' &&
+    frame.children.length > 0) {
+    // Need a known container width to calculate free space
+    // If width is FIXED (number), we know it.
+    // If width is FILL, we rely on 'availableWidth' passed from parent.
+    // If neither, we fallback to screenWidth (as per user request)
+    const containerWidth = (typeof styles.width === 'number' ? styles.width : availableWidth) || screenWidth;
+
+    if (containerWidth) {
+      const pl = styles.paddingLeft || 0;
+      const pr = styles.paddingRight || 0;
+      const totalInitialPadding = pl + pr;
+
+      // Calculate total children width
+      let childrenTotalWidth = 0;
+      for (const childNode of frame.children) {
+        childrenTotalWidth += childNode.width;
+      }
+
+      // Calculate free space
+      const freeSpace = containerWidth - totalInitialPadding - childrenTotalWidth;
+
+      if (freeSpace > 0) {
+        // Justify around: 
+        // Gap is X. 
+        // Edge spacing is X/2.
+        // N items. N-1 gaps between items. 2 edge spaces.
+        // Total Space = (N-1)*X + 2*(X/2) = (N-1)*X + X = N*X
+        // So each 'gap unit' X = FreeSpace / N
+        // But Figma SpaceBetween distributes FreeSpace into N-1 gaps.
+        // We want edge padding to be X/2.
+
+        const N = frame.children.length;
+        const gapUnit = freeSpace / N;
+        const edgePadding = gapUnit / 2; // This is what we want on edges
+
+        // Apply this extra padding to existing padding
+        frame.paddingLeft = pl + edgePadding;
+        frame.paddingRight = pr + edgePadding;
+
+        // Figma's PrimaryAxisAlignItems = 'SPACE_BETWEEN' triggers distribution of remaining space.
+        // Remaining space after our padding = FreeSpace - 2*edgePadding = FreeSpace - gapUnit = (N-1)*gapUnit.
+        // SpaceBetween splits this into N-1 gaps of size `gapUnit`.
+        // Perfect!
+        // The resolveClasses function already sets 'SPACE_BETWEEN' for justify-around.
+      }
     }
   }
 
@@ -1194,12 +1264,13 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
       // Parse HTML
       const elements = parseHTML(msg.html);
 
+      console.log('Parsed Elements:', elements);
+
       if (elements.length === 0) {
         figma.notify('No HTML elements found to convert.');
         return;
       }
 
-      // Build Figma nodes
       // Build Figma nodes
       const nodes: SceneNode[] = [];
       let xOffset = 0;
@@ -1262,7 +1333,8 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
       figma.currentPage.appendChild(artboard);
 
       for (const element of targetElements) {
-        const result = await buildFigmaNode(element, customColors, iconMap);
+        // Pass artboardWidth as the initial availableWidth, AND as screenWidth
+        const result = await buildFigmaNode(element, customColors, iconMap, artboardWidth, artboardWidth);
         if (result) {
           artboard.appendChild(result.node);
           nodes.push(result.node);
