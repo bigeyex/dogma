@@ -288,6 +288,11 @@ interface ResolvedStyles {
   flexGrow?: number;
   flexShrink?: number;
   gridCols?: number;
+  position?: 'ABSOLUTE' | 'RELATIVE' | 'STATIC';
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
 
   // Sizing
   width?: number | 'FILL' | 'HUG';
@@ -359,6 +364,38 @@ function resolveClasses(classes: string[], customColors: Record<string, string>)
       styles.flexGrow = 1;
     } else if (cls === 'flex-grow-0') {
       styles.flexGrow = 0;
+    }
+
+    // Positioning
+    else if (cls === 'absolute') styles.position = 'ABSOLUTE';
+    else if (cls === 'relative') styles.position = 'RELATIVE';
+
+    // Top, Right, Bottom, Left
+    else if (cls.startsWith('top-')) {
+      const val = parseSpacing(cls.slice(4));
+      if (val !== undefined) styles.top = val;
+    }
+    else if (cls.startsWith('right-')) {
+      const val = parseSpacing(cls.slice(6));
+      if (val !== undefined) styles.right = val;
+    }
+    else if (cls.startsWith('bottom-')) {
+      const val = parseSpacing(cls.slice(7));
+      if (val !== undefined) styles.bottom = val;
+    }
+    else if (cls.startsWith('left-')) {
+      const val = parseSpacing(cls.slice(5));
+      if (val !== undefined) styles.left = val;
+    }
+    // Inset
+    else if (cls.startsWith('inset-')) {
+      const val = parseSpacing(cls.slice(6));
+      if (val !== undefined) {
+        styles.top = val;
+        styles.right = val;
+        styles.bottom = val;
+        styles.left = val;
+      }
     }
 
     // Justify content
@@ -1154,15 +1191,21 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     innerWidth = innerWidth - pl - pr - (border * 2);
   }
 
+  const absoluteChildren: { node: SceneNode, styles: ResolvedStyles }[] = [];
+
   // Build children recursively
   for (const child of element.children) {
     const childResult = await buildFigmaNode(child, customColors, iconMap, innerWidth, screenWidth);
     if (childResult) {
-      frame.appendChild(childResult.node);
+      if (childResult.styles.position === 'ABSOLUTE') {
+        absoluteChildren.push(childResult);
+      } else {
+        frame.appendChild(childResult.node);
 
-      // Now that child is inside frame, we can apply constraints based on frame's layout mode
-      applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode);
-      applyLayoutConstraints(childResult.node, childResult.styles, frame.layoutMode);
+        // Now that child is inside frame, we can apply constraints based on frame's layout mode
+        applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode);
+        applyLayoutConstraints(childResult.node, childResult.styles, frame.layoutMode);
+      }
     }
   }
 
@@ -1194,8 +1237,8 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
       const freeSpace = containerWidth - totalInitialPadding - childrenTotalWidth;
 
       if (freeSpace > 0) {
-        // Justify around: 
-        // Gap is X. 
+        // Justify around:
+        // Gap is X.
         // Edge spacing is X/2.
         // N items. N-1 gaps between items. 2 edge spaces.
         // Total Space = (N-1)*X + 2*(X/2) = (N-1)*X + X = N*X
@@ -1226,6 +1269,54 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     // Auto layout with no children might collapse, ensure it has min size if padding is set
     // or if it has explicit size
     // If generic text node with just padding, it should be fine.
+  }
+  // PROCESS ABSOLUTE CHILDREN
+  if (absoluteChildren.length > 0) {
+    for (const absChild of absoluteChildren) {
+      frame.appendChild(absChild.node);
+      // layoutPositioning exists on Frame, Text, etc.
+      (absChild.node as any).layoutPositioning = 'ABSOLUTE';
+
+      const absStyles = absChild.styles;
+      // Intersection of mixins for TS to be happy about constraints, resize, x, y
+      const node = absChild.node as any;
+
+      // Determine X (Horizontal)
+      if (absStyles.left !== undefined && absStyles.right !== undefined) {
+        // Left + Right set = Stretch
+        node.constraints = { horizontal: 'STRETCH', vertical: node.constraints.vertical };
+        node.x = absStyles.left;
+        node.resize(frame.width - absStyles.left - absStyles.right, node.height);
+      } else if (absStyles.left !== undefined) {
+        node.constraints = { horizontal: 'MIN', vertical: node.constraints.vertical };
+        node.x = absStyles.left;
+      } else if (absStyles.right !== undefined) {
+        node.constraints = { horizontal: 'MAX', vertical: node.constraints.vertical };
+        node.x = frame.width - node.width - absStyles.right;
+      } else {
+        // Default Left
+        node.constraints = { horizontal: 'MIN', vertical: node.constraints.vertical };
+        node.x = 0;
+      }
+
+      // Determine Y (Vertical)
+      if (absStyles.top !== undefined && absStyles.bottom !== undefined) {
+        // Top + Bottom set = Stretch
+        node.constraints = { horizontal: node.constraints.horizontal, vertical: 'STRETCH' };
+        node.y = absStyles.top;
+        node.resize(node.width, frame.height - absStyles.top - absStyles.bottom);
+      } else if (absStyles.top !== undefined) {
+        node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MIN' };
+        node.y = absStyles.top;
+      } else if (absStyles.bottom !== undefined) {
+        node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MAX' };
+        node.y = frame.height - node.height - absStyles.bottom;
+      } else {
+        // Default Top
+        node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MIN' };
+        node.y = 0;
+      }
+    }
   }
 
   return wrapWithMargin(frame, styles);
