@@ -210,7 +210,14 @@ function parseHTML(html: string): ParsedElement[] {
       const trimmed = textContent.trim();
       if (trimmed && stack.length > 0) {
         const current = stack[stack.length - 1];
-        current.textContent += (current.textContent ? ' ' : '') + trimmed;
+        // Create a text node as a child
+        current.children.push({
+          tagName: '#text',
+          classes: [],
+          attributes: {},
+          textContent: trimmed,
+          children: []
+        });
       }
     } else if (fullMatch.startsWith('</')) {
       // Closing tag
@@ -933,7 +940,7 @@ interface BuildResult {
   styles: ResolvedStyles;
 }
 
-async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>, availableWidth?: number, screenWidth?: number): Promise<BuildResult | null> {
+async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>, availableWidth?: number, screenWidth?: number, inheritedStyles: ResolvedStyles = {}): Promise<BuildResult | null> {
   const styles = resolveClasses(element.classes, customColors);
 
   // Font Awesome icon detection
@@ -993,44 +1000,53 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     }
   }
 
-  const isTextElement = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'label', 'strong', 'em', 'b', 'i'].includes(element.tagName);
-  const hasOnlyText = element.children.length === 0 && element.textContent.trim();
-
-  // Text-only elements
-  if (isTextElement && hasOnlyText) {
-
+  // Handle text nodes specially
+  if (element.tagName === '#text') {
     const text = figma.createText();
 
-    // Load font with fallback
-    let fontWeight = styles.fontWeight || 'Regular';
+    // Use inherited styles for text properties
+    const combinedStyles = { ...inheritedStyles, ...styles };
+
+    const fontWeight = combinedStyles.fontWeight || 'Regular';
     try {
       await figma.loadFontAsync({ family: 'Inter', style: fontWeight });
-    } catch (e) {
-      console.warn(`Failed to load Inter ${fontWeight}, falling back to Regular`, e);
-      fontWeight = 'Regular';
+    } catch {
       await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
     }
 
     text.fontName = { family: 'Inter', style: fontWeight };
-    text.characters = element.textContent.trim();
+    text.characters = element.textContent;
 
-    // Apply text styles
-    if (styles.fontSize) text.fontSize = styles.fontSize;
-    if (styles.lineHeight) {
-      text.lineHeight = { value: styles.lineHeight, unit: 'PIXELS' };
+    if (combinedStyles.fontSize) text.fontSize = combinedStyles.fontSize;
+    if (combinedStyles.lineHeight) {
+      text.lineHeight = { value: combinedStyles.lineHeight, unit: 'PIXELS' };
     }
-    if (styles.textColor) {
-      text.fills = [{ type: 'SOLID', color: styles.textColor }];
+    if (combinedStyles.textColor) {
+      text.fills = [{ type: 'SOLID', color: combinedStyles.textColor }];
     }
-    if (styles.textAlign) {
-      text.textAlignHorizontal = styles.textAlign;
+    if (combinedStyles.textAlign) {
+      text.textAlignHorizontal = combinedStyles.textAlign;
     }
-    if (styles.opacity !== undefined) {
-      text.opacity = styles.opacity;
+    if (combinedStyles.opacity !== undefined) {
+      text.opacity = combinedStyles.opacity;
     }
 
-    return wrapWithMargin(text, styles);
+    // Text nodes are just returned directly, NO generic wrapper unless margin?
+    // Text nodes technically can't have margin in Figma in the same way, but we can wrap it.
+    // However, #text nodes from HTML text usually don't have classes, so 'styles' (from logic below) will be empty.
+    // So wrapWithMargin will effectively do nothing.
+    return { node: text, styles: combinedStyles };
   }
+
+  const isTextElement = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'label', 'strong', 'em', 'b', 'i'].includes(element.tagName);
+  const hasOnlyText = element.children.length === 0 && element.textContent.trim();
+  // Note: hasOnlyText will be false if text was converted to #text children by parseHTML.
+  // So the block below is largely legacy now, but we'll keep it for safety if parseHTML behavior varies?
+  // Actually, if we use the new parseHTML, hasOnlyText will effectively be false for non-empty text
+  // unless we revert to property-based.
+  // BUT: element.textContent is init to '' in parseHTML and never appended to. So hasOnlyText is ALWAYS false now.
+  // So we can remove the 'isTextElement && hasOnlyText' block entirely or leave it dead.
+  // I will remove it to avoid confusion.
 
   // Container elements - create frame
   const frame = figma.createFrame();
@@ -1136,29 +1152,8 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
     frame.opacity = styles.opacity;
   }
 
-  // Handle inline text content (childless text container)
-  if (element.textContent.trim() && element.children.length === 0) {
-    const text = figma.createText();
-    const fontWeight = styles.fontWeight || 'Regular';
-    try {
-      await figma.loadFontAsync({ family: 'Inter', style: fontWeight });
-    } catch {
-      await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    }
-    text.fontName = { family: 'Inter', style: fontWeight };
-    text.characters = element.textContent.trim();
-    if (styles.fontSize) text.fontSize = styles.fontSize;
-    if (styles.lineHeight) {
-      text.lineHeight = { value: styles.lineHeight, unit: 'PIXELS' };
-    }
-    if (styles.textColor) {
-      text.fills = [{ type: 'SOLID', color: styles.textColor }];
-    }
-    if (styles.textAlign) {
-      text.textAlignHorizontal = styles.textAlign;
-    }
-    frame.appendChild(text);
-  }
+  // Handle inline text content (childless text container) - REMOVED as text is now child nodes
+  // Logic moved to #text handling above.
 
   // Handle placeholder for input/textarea
   if ((element.tagName === 'input' || element.tagName === 'textarea') && element.attributes['placeholder']) {
@@ -1195,7 +1190,17 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
 
   // Build children recursively
   for (const child of element.children) {
-    const childResult = await buildFigmaNode(child, customColors, iconMap, innerWidth, screenWidth);
+    // Extract inheritable styles to pass down
+    const childInheritedStyles: ResolvedStyles = {
+      textColor: styles.textColor || inheritedStyles.textColor,
+      fontSize: styles.fontSize || inheritedStyles.fontSize,
+      fontWeight: styles.fontWeight || inheritedStyles.fontWeight,
+      fontFamily: styles.fontFamily || inheritedStyles.fontFamily,
+      textAlign: styles.textAlign || inheritedStyles.textAlign,
+      lineHeight: styles.lineHeight || inheritedStyles.lineHeight, // lineHeight is number | undefined
+    };
+
+    const childResult = await buildFigmaNode(child, customColors, iconMap, innerWidth, screenWidth, childInheritedStyles);
     if (childResult) {
       if (childResult.styles.position === 'ABSOLUTE') {
         absoluteChildren.push(childResult);
@@ -1384,7 +1389,13 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
       // Look for title tag (recursive)
       function findTitle(els: ParsedElement[]): string | undefined {
         for (const el of els) {
-          if (el.tagName === 'title') return el.textContent.trim();
+          if (el.tagName === 'title') {
+            return el.children
+              .filter(child => child.tagName === '#text')
+              .map(child => child.textContent)
+              .join(' ')
+              .trim();
+          }
           if (el.children && el.children.length > 0) {
             const found = findTitle(el.children);
             if (found) return found;
