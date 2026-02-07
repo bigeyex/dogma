@@ -1,6 +1,8 @@
 import { ParsedElement, ResolvedStyles } from './types';
 import { resolveClasses } from './parser';
 
+const INLINE_TAGS = new Set(['span', 'i', 'b', 'strong', 'em', 'a', 'img', 'u', 'code', 'mark', 'small', 'sub', 'sup', 'label', '#text']);
+
 export function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, parentLayoutMode: string) {
     if (node.type === 'FRAME' || node.type === 'TEXT') {
         if (styles.width === 'FILL') {
@@ -220,8 +222,16 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     if (styles.display === 'flex' || styles.display === 'grid') {
         frame.layoutMode = styles.flexDirection || 'HORIZONTAL';
     } else {
-        // Non-flex elements stack vertically
-        frame.layoutMode = 'VERTICAL';
+        // Detect if all children are inline-level tags. If so, default to HORIZONTAL.
+        const isInlineOnly = element.children.length > 0 && element.children.every(child => INLINE_TAGS.has(child.tagName.toLowerCase()));
+        if (isInlineOnly) {
+            frame.layoutMode = 'HORIZONTAL';
+            // Align center is usually better for inline icons + text
+            if (!styles.alignItems) frame.counterAxisAlignItems = 'CENTER';
+        } else {
+            // Non-flex elements stack vertically by default in our plugin
+            frame.layoutMode = 'VERTICAL';
+        }
     }
 
     if (frame.layoutMode === 'HORIZONTAL') {
