@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    /* INJECT_CSS */
+  </style>
+</head>
+
+<body>
+  <div class="tabs">
+    <div class="tab active" data-tab="builder">Builder</div>
+    <div class="tab" data-tab="tailwind">Tailwind</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
+
+  <!-- Builder Tab -->
+  <div id="builder-tab" class="tab-content active">
+    <h2>AI Builder</h2>
+    <p class="description">AI will generate Tailwind HTML based on your prompt.</p>
+
+    <div class="form-group">
+      <textarea id="prompt-input"
+        placeholder="e.g. A premium landing page hero section with a dark theme, a vibrant call-to-action button, and a feature list."></textarea>
+    </div>
+
+    <div class="controls">
+      <div class="toggle-group">
+        <input type="radio" id="builder-mobile" name="builder-viewport" value="mobile" checked>
+        <label for="builder-mobile">📱 Mobile</label>
+
+        <input type="radio" id="builder-desktop" name="builder-viewport" value="desktop">
+        <label for="builder-desktop">🖥️ Desktop</label>
+      </div>
+
+      <label class="checkbox-group">
+        <input type="checkbox" id="thinking-checkbox" checked>
+        <span data-i18n="thinkingLabel">Thinking(深度思考)</span>
+      </label>
+
+      <div id="copy-btn" title="Copy generated code"
+        style="display: none; margin-left: auto; cursor: pointer; color: #888; align-items: center; transition: color 0.2s;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button id="build-btn" class="btn-primary">
+        <span class="spinner"></span>
+        Build in Figma
+      </button>
+      <button id="expand-btn" class="btn-secondary">
+        <span class="spinner"></span>
+        Expand
+      </button>
+    </div>
+    <div id="builder-status" class="status"></div>
+
+    <div id="thinking-container" class="thinking-container">
+      <div id="thinking-status">AI is thinking...</div>
+      <div id="token-counter">0 tokens</div>
+      <a id="stop-btn" class="stop-link"
+        style="color: #ef4444; cursor: pointer; font-size: 11px; margin-left: 12px; text-decoration: none;">Stop</a>
+    </div>
+  </div>
+
+  <!-- Tailwind Tab -->
+  <div id="tailwind-tab" class="tab-content">
+    <h2>Tailwind → Figma</h2>
+    <p class="description">Convert existing Tailwind HTML to Figma layers.</p>
+
+    <div class="controls">
+      <div class="toggle-group">
+        <input type="radio" id="mobile" name="viewport" value="mobile" checked>
+        <label for="mobile">📱 Mobile</label>
+
+        <input type="radio" id="desktop" name="viewport" value="desktop">
+        <label for="desktop">🖥️ Desktop</label>
+      </div>
+    </div>
+
+    <textarea id="html-input"
+      placeholder="<div class=&quot;flex flex-col gap-4 p-6 bg-gray-900&quot;>...</div>"></textarea>
+
+    <div class="btn-group">
+      <button id="convert" class="btn-primary">Convert</button>
+      <button id="cancel-tailwind" class="btn-secondary">Cancel</button>
+    </div>
+    <div id="tailwind-status" class="status"></div>
+  </div>
+
+  <!-- Settings Tab -->
+  <div id="settings-tab" class="tab-content">
+    <h2>Settings</h2>
+    <p class="description">Configure your VolcEngine Ark credentials.</p>
+
+    <div class="form-group">
+      <label data-i18n="language">Language</label>
+      <select id="language">
+        <option value="zh-CN">🇨🇳 中文</option>
+        <option value="en-US">🇺🇸 English</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label data-i18n="provider">Provider</label>
+      <select id="provider">
+        <option value="volcengine">VolcEngine (Ark)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label data-i18n="chatModelId">Chat Model ID (for Expand)</label>
+      <input type="text" id="chat-model-id" placeholder="doubao-seed-1-8-251228" value="doubao-seed-1-8-251228">
+    </div>
+
+    <div class="form-group">
+      <label data-i18n="codingModelId">Coding Model ID (for Builder)</label>
+      <input type="text" id="coding-model-id" placeholder="doubao-seed-code-preview-251028"
+        value="doubao-seed-code-preview-251028">
+    </div>
+
+    <div class="form-group">
+      <label data-i18n="apiKey">API Key</label>
+      <input type="password" id="api-key" placeholder="Enter your API key">
+    </div>
+
+    <div class="btn-group">
+      <button id="save-settings" class="btn-primary" data-i18n="saveSettings">Save Settings</button>
+    </div>
+    <div id="settings-status" class="status"></div>
+  </div>
+
+  <script>
+    /* INJECT_JS */
+  </script>
+</body>
+
+</html>
