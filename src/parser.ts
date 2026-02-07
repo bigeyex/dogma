@@ -115,7 +115,7 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
         } else if (cls === 'flex-grow-0') {
             styles.flexGrow = 0;
         }
-        else if (cls === 'absolute') styles.position = 'ABSOLUTE';
+        else if (cls === 'absolute' || cls === 'fixed') styles.position = 'ABSOLUTE';
         else if (cls === 'relative') styles.position = 'RELATIVE';
         else if (cls.startsWith('top-')) {
             const val = parseSpacing(cls.slice(4));
@@ -375,16 +375,26 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
                 if (color) styles.gradient.via = color;
             }
         }
-        else if (cls.startsWith('to-') && !cls.startsWith('to-t') && !cls.startsWith('to-b') && !cls.startsWith('to-l') && !cls.startsWith('to-r')) {
-            const colorPart = cls.slice(3);
-            const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
-            if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: 'to-b' };
-            if (opacityMatch) {
-                const color = parseColor(opacityMatch[1], customColors);
-                if (color) { styles.gradient.to = color; styles.gradient.toOpacity = parseInt(opacityMatch[2]) / 100; }
+        else if (cls.startsWith('to-')) {
+            const possibleDir = cls.slice(3);
+            const validDirections = ['t', 'tr', 'r', 'br', 'b', 'bl', 'l', 'tl'];
+            if (validDirections.includes(possibleDir)) {
+                // This is a direction change, handled by bg-gradient-to-...
+                // but if someone writes 'to-r' separately, we could handle it here
+                if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: `to-${possibleDir}` as any };
+                else styles.gradient.direction = `to-${possibleDir}` as any;
             } else {
-                const color = parseColor(colorPart, customColors);
-                if (color) styles.gradient.to = color;
+                // This is a color
+                const colorPart = cls.slice(3);
+                const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
+                if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: 'to-b' };
+                if (opacityMatch) {
+                    const color = parseColor(opacityMatch[1], customColors);
+                    if (color) { styles.gradient.to = color; styles.gradient.toOpacity = parseInt(opacityMatch[2]) / 100; }
+                } else {
+                    const color = parseColor(colorPart, customColors);
+                    if (color) styles.gradient.to = color;
+                }
             }
         }
     }

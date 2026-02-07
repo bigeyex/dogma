@@ -1,6 +1,6 @@
 import { parseHTML, resolveClasses } from './parser';
 import { parseTailwindConfig } from './utils';
-import { buildFigmaNode, applyFrameStyles, applySizingConstraints, applyLayoutConstraints } from './builder';
+import { buildFigmaNode, applyFrameStyles, applySizingConstraints, applyLayoutConstraints, applyAbsolutePositioning } from './builder';
 import { ParsedElement, ResolvedStyles } from './types';
 
 figma.showUI(__html__, { width: 400, height: 560 });
@@ -104,8 +104,14 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
                 if (result) {
                     artboard.appendChild(result.node);
                     nodes.push(result.node);
-                    applySizingConstraints(result.node, result.styles, artboard.layoutMode);
-                    applyLayoutConstraints(result.node, result.styles, artboard.layoutMode);
+                    if (result.styles.position === 'ABSOLUTE') {
+                        applySizingConstraints(result.node, result.styles, artboard.layoutMode);
+                        applyLayoutConstraints(result.node, result.styles, artboard.layoutMode);
+                        applyAbsolutePositioning(result.node, result.styles, artboard);
+                    } else {
+                        applySizingConstraints(result.node, result.styles, artboard.layoutMode);
+                        applyLayoutConstraints(result.node, result.styles, artboard.layoutMode);
+                    }
                 }
             }
 

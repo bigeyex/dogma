@@ -16,7 +16,8 @@ export function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, 
             node.layoutSizingHorizontal = 'FIXED';
         } else {
             if (node.type === 'FRAME') {
-                if (parentLayoutMode === 'VERTICAL') node.layoutSizingHorizontal = 'FILL';
+                if (styles.position === 'ABSOLUTE') node.layoutSizingHorizontal = 'HUG';
+                else if (parentLayoutMode === 'VERTICAL') node.layoutSizingHorizontal = 'FILL';
                 else if (parentLayoutMode === 'HORIZONTAL') node.layoutSizingHorizontal = styles.flexGrow === 1 ? 'FILL' : 'HUG';
             } else if (node.type === 'TEXT') node.textAutoResize = 'WIDTH_AND_HEIGHT';
         }
@@ -67,7 +68,44 @@ export function applyLayoutConstraints(node: SceneNode, styles: ResolvedStyles, 
         if (styles.minWidth !== undefined) node.minWidth = styles.minWidth;
         if (styles.maxWidth !== undefined) node.maxWidth = styles.maxWidth;
         if (styles.minHeight !== undefined) node.minHeight = styles.minHeight;
-        if (styles.maxHeight !== undefined) node.maxHeight = styles.maxHeight;
+    }
+}
+
+export function applyAbsolutePositioning(node: SceneNode, styles: ResolvedStyles, parent: FrameNode) {
+    if ('layoutPositioning' in node) {
+        (node as any).layoutPositioning = 'ABSOLUTE';
+        const absStyles = styles;
+        const n = node as any;
+
+        if (absStyles.left !== undefined && absStyles.right !== undefined) {
+            n.constraints = { horizontal: 'STRETCH', vertical: n.constraints.vertical || 'MIN' };
+            n.x = absStyles.left;
+            n.resize(Math.max(1, parent.width - absStyles.left - absStyles.right), n.height);
+        } else if (absStyles.left !== undefined) {
+            n.constraints = { horizontal: 'MIN', vertical: n.constraints.vertical || 'MIN' };
+            n.x = absStyles.left;
+        } else if (absStyles.right !== undefined) {
+            n.constraints = { horizontal: 'MAX', vertical: n.constraints.vertical || 'MIN' };
+            n.x = parent.width - n.width - absStyles.right;
+        } else {
+            n.constraints = { horizontal: 'MIN', vertical: n.constraints.vertical || 'MIN' };
+            n.x = 0;
+        }
+
+        if (absStyles.top !== undefined && absStyles.bottom !== undefined) {
+            n.constraints = { horizontal: n.constraints.horizontal, vertical: 'STRETCH' };
+            n.y = absStyles.top;
+            n.resize(n.width, Math.max(1, parent.height - absStyles.top - absStyles.bottom));
+        } else if (absStyles.top !== undefined) {
+            n.constraints = { horizontal: n.constraints.horizontal, vertical: 'MIN' };
+            n.y = absStyles.top;
+        } else if (absStyles.bottom !== undefined) {
+            n.constraints = { horizontal: n.constraints.horizontal, vertical: 'MAX' };
+            n.y = parent.height - n.height - absStyles.bottom;
+        } else {
+            n.constraints = { horizontal: n.constraints.horizontal, vertical: 'MIN' };
+            n.y = 0;
+        }
     }
 }
 
@@ -148,8 +186,9 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
             }
 
             if (svgContent) {
-                if (styles.textColor) {
-                    const hexColor = `#${Math.round(styles.textColor.r * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.g * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.b * 255).toString(16).padStart(2, '0')}`;
+                const iconColor = styles.textColor || inheritedStyles.textColor;
+                if (iconColor) {
+                    const hexColor = `#${Math.round(iconColor.r * 255).toString(16).padStart(2, '0')}${Math.round(iconColor.g * 255).toString(16).padStart(2, '0')}${Math.round(iconColor.b * 255).toString(16).padStart(2, '0')}`;
                     svgContent = svgContent.replace(/<path/g, `<path fill="${hexColor}"`).replace(/fill="[^"]*"/g, `fill="${hexColor}"`);
                 }
 
@@ -323,32 +362,9 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     if (absoluteChildren.length > 0) {
         for (const absChild of absoluteChildren) {
             frame.appendChild(absChild.node);
-            (absChild.node as any).layoutPositioning = 'ABSOLUTE';
-            const node = absChild.node as any;
-            const absStyles = absChild.styles;
-            if (absStyles.left !== undefined && absStyles.right !== undefined) {
-                node.constraints = { horizontal: 'STRETCH', vertical: node.constraints.vertical };
-                node.x = absStyles.left;
-                node.resize(frame.width - absStyles.left - absStyles.right, node.height);
-            } else if (absStyles.left !== undefined) {
-                node.constraints = { horizontal: 'MIN', vertical: node.constraints.vertical };
-                node.x = absStyles.left;
-            } else if (absStyles.right !== undefined) {
-                node.constraints = { horizontal: 'MAX', vertical: node.constraints.vertical };
-                node.x = frame.width - node.width - absStyles.right;
-            } else { node.constraints = { horizontal: 'MIN', vertical: node.constraints.vertical }; node.x = 0; }
-
-            if (absStyles.top !== undefined && absStyles.bottom !== undefined) {
-                node.constraints = { horizontal: node.constraints.horizontal, vertical: 'STRETCH' };
-                node.y = absStyles.top;
-                node.resize(node.width, frame.height - absStyles.top - absStyles.bottom);
-            } else if (absStyles.top !== undefined) {
-                node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MIN' };
-                node.y = absStyles.top;
-            } else if (absStyles.bottom !== undefined) {
-                node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MAX' };
-                node.y = frame.height - node.height - absStyles.bottom;
-            } else { node.constraints = { horizontal: node.constraints.horizontal, vertical: 'MIN' }; node.y = 0; }
+            applySizingConstraints(absChild.node, absChild.styles, frame.layoutMode);
+            applyLayoutConstraints(absChild.node, absChild.styles, frame.layoutMode);
+            applyAbsolutePositioning(absChild.node, absChild.styles, frame);
         }
     }
 
