@@ -1548,6 +1548,19 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
       // Create main artboard/wrapper frame
       const artboard = figma.createFrame();
       artboard.name = pageTitle;
+
+      // Smart Positioning: Place 30px to the right of current selection if it exists
+      const selection = figma.currentPage.selection;
+      if (selection.length > 0) {
+        const lastNode = selection[selection.length - 1];
+        artboard.x = lastNode.x + lastNode.width + 30;
+        artboard.y = lastNode.y;
+      } else {
+        // Default to center of viewport
+        artboard.x = figma.viewport.center.x - (artboardWidth / 2);
+        artboard.y = figma.viewport.center.y - 400; // Offset slightly up
+      }
+
       artboard.layoutMode = 'VERTICAL';
       // Desktop/Mobile fixed width
       artboard.resize(artboardWidth, artboard.height);

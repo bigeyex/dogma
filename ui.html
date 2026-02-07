@@ -293,6 +293,15 @@
         <input type="checkbox" id="thinking-checkbox" checked>
         <span data-i18n="thinkingLabel">Thinking(深度思考)</span>
       </label>
+
+      <div id="copy-btn" title="Copy generated code"
+        style="display: none; margin-left: auto; cursor: pointer; color: #888; align-items: center; transition: color 0.2s;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </div>
     </div>
 
     <div class="btn-group">
@@ -663,6 +672,25 @@
 
     // AI Builder logic
     let abortController = null;
+    let lastGeneratedCode = "";
+
+    const copyBtn = document.getElementById('copy-btn');
+    copyBtn.onclick = () => {
+      if (!lastGeneratedCode) return;
+      const textArea = document.createElement("textarea");
+      textArea.value = lastGeneratedCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("Copy");
+      textArea.remove();
+
+      // Visual feedback
+      const originalHTML = copyBtn.innerHTML;
+      copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+      setTimeout(() => {
+        copyBtn.innerHTML = originalHTML;
+      }, 2000);
+    };
 
     document.getElementById('stop-btn').onclick = () => {
       if (abortController) {
@@ -756,10 +784,10 @@
                   reasoningText += delta.reasoning_content;
                   document.getElementById('thinking-status').textContent = t.aiThinking;
                 } else if (delta.content) {
-                  fullText += delta.content;
                   document.getElementById('thinking-status').textContent = t.generating;
                   promptInput.value = fullText;
                   promptInput.scrollTop = promptInput.scrollHeight;
+                  lastGeneratedCode = fullText;
                 }
 
                 totalEstimatedTokens = Math.floor((reasoningText.length + fullText.length) / 4);
@@ -784,6 +812,7 @@
         buildBtn.disabled = false;
         btn.classList.remove('loading');
         thinkingContainer.classList.remove('active');
+        if (lastGeneratedCode) copyBtn.style.display = 'flex';
         abortController = null;
       }
     };
@@ -812,11 +841,16 @@
       btn.classList.add('loading');
       status.textContent = '';
       status.style.display = 'none';
+      copyBtn.style.display = 'none';
       thinkingContainer.classList.add('active');
       document.getElementById('thinking-status').textContent = t.contactingAI;
       document.getElementById('token-counter').textContent = `0 ${t.tokens}`;
 
       abortController = new AbortController();
+
+      const viewportDesc = viewport === 'mobile'
+        ? "Target Viewport: Mobile (375px width). Use single-column layouts, larger touch targets, and vertical stacking."
+        : "Target Viewport: Desktop (1440px width). Use multi-column layouts, horizontal alignment, and whitespace effectively.";
 
       try {
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
@@ -833,7 +867,7 @@
             messages: [
               {
                 role: 'system',
-                content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Do NOT generate a tailwind.config.js file. Use arbitrary values for specific colors (e.g., bg-[#123456], text-[#abcdef]) directly in the class names.`
+                content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Do NOT generate a tailwind.config.js file. Use arbitrary values for specific colors (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 8. Prefer Flexbox over Grid for all layouts. Use Grid only if absolutely necessary for complex two-dimensional structures.`
               },
               { role: 'user', content: prompt }
             ]
@@ -873,6 +907,7 @@
                 } else if (delta.content) {
                   fullHtml += delta.content;
                   document.getElementById('thinking-status').textContent = t.generating;
+                  lastGeneratedCode = fullHtml;
                 }
 
                 totalEstimatedTokens = Math.floor((reasoningText.length + fullHtml.length) / 4);
@@ -907,6 +942,7 @@
         expandBtn.disabled = false;
         btn.classList.remove('loading');
         thinkingContainer.classList.remove('active');
+        if (lastGeneratedCode) copyBtn.style.display = 'flex';
         abortController = null;
       }
     };
