@@ -126,6 +126,19 @@ function parseColor(colorClass: string, customColors: Record<string, string>): R
     return hexToRgb(colorClass);
   }
 
+  // Check for arbitrary values: [color] or [#hex]
+  if (colorClass.startsWith('[') && colorClass.endsWith(']')) {
+    const value = colorClass.slice(1, -1);
+    // If it's a hex, parse it
+    if (value.startsWith('#') || value.startsWith('rgb') || value.startsWith('hsl')) {
+      // Simple heavy-handed check for hex
+      if (value.startsWith('#')) return hexToRgb(value);
+      // TODO: Support rgb/hsl parsing if needed, but hex is most common
+    }
+    // Might be a named color like [red] -> define standard html colors if needed?
+    // For now, assume it's hex if it starts with #
+  }
+
   // Parse Tailwind color format: color-shade (e.g., blue-500)
   const parts = colorClass.split('-');
   if (parts.length === 1) {
@@ -145,6 +158,58 @@ function parseColor(colorClass: string, customColors: Record<string, string>): R
   }
 
   return null;
+}
+
+// ============================================================================
+// RESPONSIVE UTILS
+// ============================================================================
+
+const BREAKPOINTS: Record<string, number> = {
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+  '2xl': 1536,
+};
+
+function sortClasses(classes: string[], screenWidth: number): string[] {
+  // 1. Parse class into { prefix, baseClass }
+  // 2. Filter out unsatisfied prefixes
+  // 3. Sort by breakpoint size (base < sm < md < ...)
+
+  const parsed = classes.map(cls => {
+    const parts = cls.split(':');
+    let prefix = '';
+    let baseClass = cls;
+
+    if (parts.length > 1) {
+      // Check if first part is a known breakpoint
+      const possiblePrefix = parts[0];
+      if (BREAKPOINTS[possiblePrefix]) {
+        prefix = possiblePrefix;
+        baseClass = parts.slice(1).join(':');
+      }
+    }
+    return { original: cls, prefix, baseClass };
+  });
+
+  const active = parsed.filter(p => {
+    if (!p.prefix) return true;
+    return screenWidth >= BREAKPOINTS[p.prefix];
+  });
+
+  active.sort((a, b) => {
+    const scoreA = a.prefix ? BREAKPOINTS[a.prefix] : 0;
+    const scoreB = b.prefix ? BREAKPOINTS[b.prefix] : 0;
+    return scoreA - scoreB;
+  });
+
+  // Return just the base class part so the resolver doesn't need to know about prefixes?
+  // NO, because resolveClasses might rely on full strings or we'd have to change it to accept baseClass.
+  // Actually, resolveClasses expects standard tailwind class names (e.g. 'flex', 'w-full').
+  // If we strip 'sm:', we get 'grid-cols-4'. resolveClasses handles that fine.
+  // This effectively "flattens" the responsive styles into the current view.
+  return active.map(p => p.baseClass);
 }
 
 // ============================================================================
@@ -351,10 +416,15 @@ interface ResolvedStyles {
 }
 
 
-function resolveClasses(classes: string[], customColors: Record<string, string>): ResolvedStyles {
+
+
+function resolveClasses(classes: string[], customColors: Record<string, string>, screenWidth?: number): ResolvedStyles {
+  // If screenWidth is provided, filter and sort classes for responsiveness
+  const processedClasses = screenWidth ? sortClasses(classes, screenWidth) : classes;
+
   const styles: ResolvedStyles = {};
 
-  for (const cls of classes) {
+  for (const cls of processedClasses) {
     // Flex layout
     if (cls === 'flex') {
       styles.display = 'flex';
@@ -941,7 +1011,7 @@ interface BuildResult {
 }
 
 async function buildFigmaNode(element: ParsedElement, customColors: Record<string, string>, iconMap: Record<string, string>, availableWidth?: number, screenWidth?: number, inheritedStyles: ResolvedStyles = {}): Promise<BuildResult | null> {
-  const styles = resolveClasses(element.classes, customColors);
+  const styles = resolveClasses(element.classes, customColors, screenWidth);
 
   // Font Awesome icon detection
   const hasFa = element.classes.includes('fa') || element.classes.includes('fas') || element.classes.includes('far') || element.classes.includes('fab');
@@ -1003,18 +1073,27 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
   // Handle text nodes specially
   if (element.tagName === '#text') {
     const text = figma.createText();
-
     // Use inherited styles for text properties
     const combinedStyles = { ...inheritedStyles, ...styles };
 
-    const fontWeight = combinedStyles.fontWeight || 'Regular';
+    const requestedFontWeight = combinedStyles.fontWeight || 'Regular';
+    let loadedFontStyle = 'Regular'; // Default fallback
+
+    // Try loading the requested font weight first
     try {
-      await figma.loadFontAsync({ family: 'Inter', style: fontWeight });
+      await figma.loadFontAsync({ family: 'Inter', style: requestedFontWeight });
+      loadedFontStyle = requestedFontWeight;
     } catch {
-      await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+      // If requested font weight fails, fall back to Regular
+      try {
+        await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+        loadedFontStyle = 'Regular';
+      } catch (e) {
+        console.error('Failed to load any Inter font:', e);
+      }
     }
 
-    text.fontName = { family: 'Inter', style: fontWeight };
+    text.fontName = { family: 'Inter', style: loadedFontStyle };
     text.characters = element.textContent;
 
     if (combinedStyles.fontSize) text.fontSize = combinedStyles.fontSize;
@@ -1210,6 +1289,57 @@ async function buildFigmaNode(element: ParsedElement, customColors: Record<strin
         // Now that child is inside frame, we can apply constraints based on frame's layout mode
         applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode);
         applyLayoutConstraints(childResult.node, childResult.styles, frame.layoutMode);
+      }
+    }
+  }
+
+  // GRID LAYOUT CHILD SIZING
+  if (styles.display === 'grid' && styles.gridCols && frame.children.length > 0) {
+    // Calculate width per column
+    // Width = (ContainerWidth - (Cols - 1) * GapX) / Cols
+    // We need strict container width.
+    const containerWidth = (typeof styles.width === 'number' ? styles.width : innerWidth);
+
+    if (containerWidth) {
+      const cols = styles.gridCols;
+      const gap = styles.gapX ?? 0;
+
+      // The containerWidth here (if derived from availableWidth) already excludes padding/border (it's innerWidth).
+      // IF styles.width was a number (Fixed), we need to subtract padding to get Inner Width.
+      let workingWidth = containerWidth;
+      if (typeof styles.width === 'number') {
+        const pl = styles.paddingLeft || 0;
+        const pr = styles.paddingRight || 0;
+        const border = styles.borderWidth || 0;
+        workingWidth = styles.width - pl - pr - (border * 2);
+      }
+
+      // Ensure we don't divide by zero or have negative width
+      if (workingWidth > 0 && cols > 0) {
+        const totalGap = (cols - 1) * gap;
+        const colWidth = (workingWidth - totalGap) / cols;
+
+        if (colWidth > 0) {
+          for (const childNode of frame.children) {
+            // Check if child is absolutely positioned (should be ignored for grid tracks)
+            // Figma frame.children includes absolute details? 
+            // We can check constraint or layoutPositioning?
+            // In Figma API, checking 'layoutPositioning' might be needed if typed as such.
+            // But simplifying: just resize all.
+            // Note: Absolute positioned children usually shouldn't be affected but resizing them explicitly might be weird.
+            // Safe bet: resize all for now as absolute children in grid are rare/weird in this context.
+
+            if ('resize' in childNode) {
+              childNode.resize(colWidth, childNode.height);
+            }
+            if ('layoutSizingHorizontal' in childNode) {
+              childNode.layoutSizingHorizontal = 'FIXED';
+            }
+
+            // If child is a text node with "Width & Height" (Auto), changing width to fixed wraps it. Good.
+            // If child is frame with "Hug", changing width makes it fixed. Good.
+          }
+        }
       }
     }
   }
