@@ -9,7 +9,7 @@
     "build:ui": "esbuild src/ui/main.ts --bundle --outfile=ui.js --target=es2015 && node scripts/bundle-ui.js",
     "lint": "eslint --ext .ts,.tsx --ignore-pattern node_modules .",
     "lint:fix": "eslint --ext .ts,.tsx --ignore-pattern node_modules --fix .",
-    "watch": "npm run build -- --watch"
+    "watch": "node scripts/watch.js"
   },
   "author": "",
   "license": "",

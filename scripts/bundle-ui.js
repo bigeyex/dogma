@@ -15,7 +15,11 @@ function bundle() {
     template = template.replace('/* INJECT_JS */', js);
 
     fs.writeFileSync(OUTPUT_HTML, template);
-    console.log('✓ UI bundled successfully into ui.html');
+    console.log(`[${new Date().toLocaleTimeString()}] ✓ UI bundled successfully into ui.html`);
 }
 
-bundle();
+module.exports = { bundle };
+
+if (require.main === module) {
+    bundle();
+}

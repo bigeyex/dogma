@@ -22,7 +22,7 @@ function colorDistance(c1: { r: number; g: number; b: number }, c2: { r: number;
     return Math.sqrt((c1.r - c2.r) ** 2 + (c1.g - c2.g) ** 2 + (c1.b - c2.b) ** 2);
 }
 
-function findClosestTailwindColor(hex: string, prefix: 'bg' | 'text' | 'border'): string {
+function findClosestTailwindColor(hex: string, prefix: 'bg' | 'text' | 'border' | 'from' | 'via' | 'to'): string {
     const target = hexToRgb(hex);
     if (!target) return `${prefix}-[${hex}]`;
 
@@ -45,6 +45,30 @@ function findClosestTailwindColor(hex: string, prefix: 'bg' | 'text' | 'border')
 
     // Use arbitrary value if no close match (threshold ~5% difference)
     return minDistance < 0.1 ? closestClass : `${prefix}-[${hex}]`;
+}
+
+function getGradientDirection(handlePositions: readonly Vector[]): string {
+    if (handlePositions.length < 2) return 'to-r';
+
+    const start = handlePositions[0];
+    const end = handlePositions[1];
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI); // -180 to 180
+
+    // Map angle to Tailwind directions
+    if (angle > -22.5 && angle <= 22.5) return 'to-r';
+    if (angle > 22.5 && angle <= 67.5) return 'to-br';
+    if (angle > 67.5 && angle <= 112.5) return 'to-b';
+    if (angle > 112.5 && angle <= 157.5) return 'to-bl';
+    if (angle > 157.5 || angle <= -157.5) return 'to-l';
+    if (angle > -157.5 && angle <= -112.5) return 'to-tl';
+    if (angle > -112.5 && angle <= -67.5) return 'to-t';
+    if (angle > -67.5 && angle <= -22.5) return 'to-tr';
+
+    return 'to-r';
 }
 
 /* ============================================================================
@@ -255,11 +279,33 @@ function convertNode(node: SceneNode, indent: number = 0): string {
         // Background
         if (frameNode.fills && Array.isArray(frameNode.fills) && frameNode.fills.length > 0) {
             const fill = frameNode.fills[0];
-            if (fill.type === 'SOLID' && fill.visible !== false) {
-                const hex = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
-                classes.push(findClosestTailwindColor(hex, 'bg'));
-                if (fill.opacity !== undefined && fill.opacity < 1) {
-                    classes.push(`bg-opacity-${Math.round(fill.opacity * 100)}`);
+            if (fill.visible !== false) {
+                if (fill.type === 'SOLID') {
+                    const hex = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
+                    classes.push(findClosestTailwindColor(hex, 'bg'));
+                    if (fill.opacity !== undefined && fill.opacity < 1) {
+                        classes.push(`bg-opacity-${Math.round(fill.opacity * 100)}`);
+                    }
+                } else if (fill.type === 'GRADIENT_LINEAR' && fill.gradientHandlePositions && fill.gradientStops) {
+                    const direction = getGradientDirection(fill.gradientHandlePositions);
+                    classes.push(`bg-gradient-${direction}`);
+
+                    const stops = fill.gradientStops;
+                    if (stops && stops.length >= 2) {
+                        const fromHex = rgbToHex(stops[0].color.r, stops[0].color.g, stops[0].color.b);
+                        classes.push(findClosestTailwindColor(fromHex, 'from'));
+
+                        if (stops.length > 2) {
+                            const viaHex = rgbToHex(stops[1].color.r, stops[1].color.g, stops[1].color.b);
+                            classes.push(findClosestTailwindColor(viaHex, 'via'));
+
+                            const toHex = rgbToHex(stops[stops.length - 1].color.r, stops[stops.length - 1].color.g, stops[stops.length - 1].color.b);
+                            classes.push(findClosestTailwindColor(toHex, 'to'));
+                        } else {
+                            const toHex = rgbToHex(stops[1].color.r, stops[1].color.g, stops[1].color.b);
+                            classes.push(findClosestTailwindColor(toHex, 'to'));
+                        }
+                    }
                 }
             }
         }
@@ -335,9 +381,31 @@ function convertNode(node: SceneNode, indent: number = 0): string {
         // Background
         if (rectNode.fills && Array.isArray(rectNode.fills) && rectNode.fills.length > 0) {
             const fill = rectNode.fills[0];
-            if (fill.type === 'SOLID' && fill.visible !== false) {
-                const hex = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
-                classes.push(findClosestTailwindColor(hex, 'bg'));
+            if (fill.visible !== false) {
+                if (fill.type === 'SOLID') {
+                    const hex = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
+                    classes.push(findClosestTailwindColor(hex, 'bg'));
+                } else if (fill.type === 'GRADIENT_LINEAR' && fill.gradientHandlePositions && fill.gradientStops) {
+                    const direction = getGradientDirection(fill.gradientHandlePositions);
+                    classes.push(`bg-gradient-${direction}`);
+
+                    const stops = fill.gradientStops;
+                    if (stops && stops.length >= 2) {
+                        const fromHex = rgbToHex(stops[0].color.r, stops[0].color.g, stops[0].color.b);
+                        classes.push(findClosestTailwindColor(fromHex, 'from'));
+
+                        if (stops.length > 2) {
+                            const viaHex = rgbToHex(stops[1].color.r, stops[1].color.g, stops[1].color.b);
+                            classes.push(findClosestTailwindColor(viaHex, 'via'));
+
+                            const toHex = rgbToHex(stops[stops.length - 1].color.r, stops[stops.length - 1].color.g, stops[stops.length - 1].color.b);
+                            classes.push(findClosestTailwindColor(toHex, 'to'));
+                        } else {
+                            const toHex = rgbToHex(stops[1].color.r, stops[1].color.g, stops[1].color.b);
+                            classes.push(findClosestTailwindColor(toHex, 'to'));
+                        }
+                    }
+                }
             }
         }
 
@@ -351,9 +419,19 @@ function convertNode(node: SceneNode, indent: number = 0): string {
         return `${indentStr}<div${classAttr}></div>\n`;
     }
 
-    // Handle vectors (icons) - output as placeholder
-    if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
-        return `${indentStr}<!-- Icon: ${node.name} -->\n${indentStr}<i class="fa-solid fa-circle"></i>\n`;
+    // Handle vectors and shapes - output as sized gray placeholders
+    const isShape = ['VECTOR', 'BOOLEAN_OPERATION', 'ELLIPSE', 'LINE', 'POLYGON', 'STAR', 'REGULAR_POLYGON'].includes(node.type);
+    if (isShape) {
+        const shapeNode = node as LayoutMixin & SceneNode;
+        classes.push('bg-gray-200', 'flex', 'items-center', 'justify-center', 'text-gray-500', 'text-[10px]', 'overflow-hidden');
+
+        if (typeof shapeNode.width === 'number') classes.push(`w-[${Math.round(shapeNode.width)}px]`);
+        if (typeof shapeNode.height === 'number') classes.push(`h-[${Math.round(shapeNode.height)}px]`);
+
+        if (node.type === 'ELLIPSE') classes.push('rounded-full');
+
+        const classAttr = classes.length > 0 ? ` class="${classes.join(' ')}"` : '';
+        return `${indentStr}<!-- ${node.type}: ${node.name} -->\n${indentStr}<div${classAttr}>${node.name}</div>\n`;
     }
 
     return '';
