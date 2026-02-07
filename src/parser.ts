@@ -99,9 +99,9 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
     const styles: ResolvedStyles = {};
 
     for (const cls of processedClasses) {
-        if (cls === 'flex') {
+        if (cls === 'flex' || cls === 'inline-flex') {
             styles.display = 'flex';
-            styles.flexDirection = 'HORIZONTAL';
+            if (!styles.flexDirection) styles.flexDirection = 'HORIZONTAL';
         } else if (cls === 'flex-row') {
             styles.flexDirection = 'HORIZONTAL';
         } else if (cls === 'flex-col') {
@@ -343,6 +343,50 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
         else if (cls === 'font-serif') styles.fontFamily = 'serif';
         else if (cls === 'font-sans') styles.fontFamily = 'sans';
         else if (cls === 'font-mono') styles.fontFamily = 'mono';
+        else if (cls.startsWith('bg-gradient-to-')) {
+            const dir = cls.slice(15);
+            const validDirs = ['t', 'tr', 'r', 'br', 'b', 'bl', 'l', 'tl'];
+            if (validDirs.includes(dir)) {
+                if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: `to-${dir}` as any };
+                else styles.gradient.direction = `to-${dir}` as any;
+            }
+        }
+        else if (cls.startsWith('from-')) {
+            const colorPart = cls.slice(5);
+            const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
+            if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: 'to-b' };
+            if (opacityMatch) {
+                const color = parseColor(opacityMatch[1], customColors);
+                if (color) { styles.gradient.from = color; styles.gradient.fromOpacity = parseInt(opacityMatch[2]) / 100; }
+            } else {
+                const color = parseColor(colorPart, customColors);
+                if (color) styles.gradient.from = color;
+            }
+        }
+        else if (cls.startsWith('via-')) {
+            const colorPart = cls.slice(4);
+            const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
+            if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: 'to-b' };
+            if (opacityMatch) {
+                const color = parseColor(opacityMatch[1], customColors);
+                if (color) { styles.gradient.via = color; styles.gradient.viaOpacity = parseInt(opacityMatch[2]) / 100; }
+            } else {
+                const color = parseColor(colorPart, customColors);
+                if (color) styles.gradient.via = color;
+            }
+        }
+        else if (cls.startsWith('to-') && !cls.startsWith('to-t') && !cls.startsWith('to-b') && !cls.startsWith('to-l') && !cls.startsWith('to-r')) {
+            const colorPart = cls.slice(3);
+            const opacityMatch = colorPart.match(/^(.+)\/(\d+)$/);
+            if (!styles.gradient) styles.gradient = { type: 'LINEAR', direction: 'to-b' };
+            if (opacityMatch) {
+                const color = parseColor(opacityMatch[1], customColors);
+                if (color) { styles.gradient.to = color; styles.gradient.toOpacity = parseInt(opacityMatch[2]) / 100; }
+            } else {
+                const color = parseColor(colorPart, customColors);
+                if (color) styles.gradient.to = color;
+            }
+        }
     }
     return styles;
 }

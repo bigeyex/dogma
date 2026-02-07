@@ -14,6 +14,7 @@ export function hexToRgb(hex: string): RGB {
 
 export function parseSpacing(value: string): number | undefined {
     if (SPACING_SCALE[value] !== undefined) return SPACING_SCALE[value];
+    if (value === 'screen') return 800; // Default viewport height fallback
 
     const arbitraryMatch = value.match(/^\[(\d+)(?:px)?\]$/);
     if (arbitraryMatch) {
@@ -82,7 +83,7 @@ export function calculateLineHeight(style: any, fontSize: number): number {
 
 export function hexAlphaToRgba(hex: string, alpha: number): { r: number, g: number, b: number, a: number } {
     const rgb = hexToRgb(hex);
-    return { ...rgb, a: alpha };
+    return Object.assign({}, rgb, { a: alpha });
 }
 
 export function rgbToHex(r: number, g: number, b: number): string {

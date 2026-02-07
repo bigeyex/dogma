@@ -72,4 +72,16 @@ export interface ResolvedStyles {
     marginRight?: number;
     marginBottom?: number;
     marginLeft?: number;
+
+    // Gradient
+    gradient?: {
+        type: 'LINEAR';
+        direction: 'to-t' | 'to-tr' | 'to-r' | 'to-br' | 'to-b' | 'to-bl' | 'to-l' | 'to-tl';
+        from?: RGB;
+        via?: RGB;
+        to?: RGB;
+        fromOpacity?: number;
+        viaOpacity?: number;
+        toOpacity?: number;
+    };
 }

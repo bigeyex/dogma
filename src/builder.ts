@@ -52,7 +52,7 @@ export function wrapWithMargin(node: SceneNode, styles: ResolvedStyles): { node:
     wrapper.appendChild(node);
     applySizingConstraints(node, styles, 'VERTICAL');
 
-    const wrapperStyles = { ...styles };
+    const wrapperStyles = Object.assign({}, styles);
     if (typeof styles.width === 'number') wrapperStyles.width = 'HUG';
     if (typeof styles.height === 'number') wrapperStyles.height = 'HUG';
 
@@ -67,6 +67,56 @@ export function applyLayoutConstraints(node: SceneNode, styles: ResolvedStyles, 
         if (styles.minHeight !== undefined) node.minHeight = styles.minHeight;
         if (styles.maxHeight !== undefined) node.maxHeight = styles.maxHeight;
     }
+}
+
+export function applyFrameStyles(frame: FrameNode, styles: ResolvedStyles) {
+    if (styles.gradient) {
+        const { direction, from, via, to, fromOpacity, viaOpacity, toOpacity } = styles.gradient;
+        const stops: ColorStop[] = [];
+        if (from) stops.push({ position: 0, color: Object.assign({}, from, { a: fromOpacity ?? 1 }) });
+        if (via) stops.push({ position: 0.5, color: Object.assign({}, via, { a: viaOpacity ?? 1 }) });
+        if (to) stops.push({ position: 1, color: Object.assign({}, to, { a: toOpacity ?? 1 }) });
+
+        if (stops.length >= 2) {
+            const transforms: Record<string, [number, number, number][]> = {
+                'to-t': [[0, -1, 1], [1, 0, 0]],
+                'to-tr': [[1, -1, 0], [1, 1, 0]],
+                'to-r': [[1, 0, 0], [0, 1, 0]],
+                'to-br': [[1, 1, 0], [-1, 1, 0]],
+                'to-b': [[0, 1, 0], [-1, 0, 1]],
+                'to-bl': [[-1, 1, 1], [-1, -1, 1]],
+                'to-l': [[-1, 0, 1], [0, -1, 1]],
+                'to-tl': [[-1, -1, 1], [1, -1, 1]]
+            };
+            frame.fills = [{
+                type: 'GRADIENT_LINEAR',
+                gradientTransform: (transforms[direction] || transforms['to-b']) as Transform,
+                gradientStops: stops
+            }];
+        }
+    } else if (styles.backgroundColor) {
+        frame.fills = [{ type: 'SOLID', color: styles.backgroundColor, opacity: styles.backgroundOpacity ?? 1 }];
+    } else {
+        frame.fills = [];
+    }
+
+    if (styles.paddingTop !== undefined) frame.paddingTop = styles.paddingTop;
+    if (styles.paddingRight !== undefined) frame.paddingRight = styles.paddingRight;
+    if (styles.paddingBottom !== undefined) frame.paddingBottom = styles.paddingBottom;
+    if (styles.paddingLeft !== undefined) frame.paddingLeft = styles.paddingLeft;
+
+    if (styles.borderWidth) {
+        frame.strokeWeight = styles.borderWidth;
+        frame.strokes = [{ type: 'SOLID', color: styles.borderColor || { r: 0.8, g: 0.8, b: 0.8 } }];
+    }
+    if (styles.borderRadius !== undefined) frame.cornerRadius = styles.borderRadius;
+    if (styles.borderRadiusTL !== undefined) frame.topLeftRadius = styles.borderRadiusTL;
+    if (styles.borderRadiusTR !== undefined) frame.topRightRadius = styles.borderRadiusTR;
+    if (styles.borderRadiusBR !== undefined) frame.bottomRightRadius = styles.borderRadiusBR;
+    if (styles.borderRadiusBL !== undefined) frame.bottomLeftRadius = styles.borderRadiusBL;
+    if (styles.shadows) frame.effects = styles.shadows;
+    if (styles.opacity !== undefined) frame.opacity = styles.opacity;
+    if (styles.overflow === 'hidden') frame.clipsContent = true;
 }
 
 interface BuildResult {
@@ -100,13 +150,39 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
                     const hexColor = `#${Math.round(styles.textColor.r * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.g * 255).toString(16).padStart(2, '0')}${Math.round(styles.textColor.b * 255).toString(16).padStart(2, '0')}`;
                     svgContent = svgContent.replace(/<path/g, `<path fill="${hexColor}"`).replace(/fill="[^"]*"/g, `fill="${hexColor}"`);
                 }
+
+                const baseSize = styles.fontSize || 16;
+                const iconSize = baseSize * 0.75;
+                const offset = (baseSize - iconSize) / 2;
+
+                const wrapper = figma.createFrame();
+                wrapper.name = `fa-${iconName}-container`;
+                wrapper.resize(baseSize, baseSize);
+                wrapper.fills = [];
+                wrapper.clipsContent = true;
+
                 const svgNode = figma.createNodeFromSvg(svgContent);
                 svgNode.name = `fa-${iconName}`;
-                const size = styles.fontSize || 16;
-                svgNode.resize(size, size);
-                styles.width = size;
-                styles.height = size;
-                return { node: svgNode, styles };
+                svgNode.resize(iconSize, iconSize);
+                svgNode.x = offset;
+                svgNode.y = offset;
+                wrapper.appendChild(svgNode);
+
+                styles.width = baseSize;
+                styles.height = baseSize;
+                return { node: wrapper, styles };
+            } else {
+                // Fallback: Gray placeholder rectangle
+                const baseSize = styles.fontSize || 16;
+                const rect = figma.createRectangle();
+                rect.name = `fa-${iconName}-placeholder`;
+                rect.resize(baseSize, baseSize);
+                rect.fills = [{ type: 'SOLID', color: { r: 0.8, g: 0.8, b: 0.8 }, opacity: 0.5 }];
+                rect.cornerRadius = 2;
+
+                styles.width = baseSize;
+                styles.height = baseSize;
+                return { node: rect, styles };
             }
         }
     }
@@ -114,7 +190,7 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     // Text handling
     if (element.tagName === '#text') {
         const text = figma.createText();
-        const combinedStyles = { ...inheritedStyles, ...styles };
+        const combinedStyles = Object.assign({}, inheritedStyles, styles);
         const requestedFontWeight = combinedStyles.fontWeight || 'Regular';
         let loadedFontStyle = 'Regular';
         try {
@@ -140,9 +216,13 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     frame.name = element.tagName + (meaningfulClasses.length ? '.' + meaningfulClasses.slice(0, 2).join('.') : '');
     frame.fills = [];
 
-    if (styles.display === 'flex') frame.layoutMode = styles.flexDirection || 'HORIZONTAL';
-    else if (styles.display === 'grid') frame.layoutMode = 'HORIZONTAL';
-    else frame.layoutMode = 'VERTICAL';
+    // Flex direction: default to horizontal (row) per CSS flexbox spec
+    if (styles.display === 'flex' || styles.display === 'grid') {
+        frame.layoutMode = styles.flexDirection || 'HORIZONTAL';
+    } else {
+        // Non-flex elements stack vertically
+        frame.layoutMode = 'VERTICAL';
+    }
 
     if (frame.layoutMode === 'HORIZONTAL') {
         frame.itemSpacing = styles.gapX ?? styles.gap ?? 0;
@@ -152,28 +232,12 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
         if (styles.flexWrap === 'WRAP') frame.counterAxisSpacing = styles.gapX ?? styles.gap ?? 0;
     }
 
-    if (styles.paddingTop !== undefined) frame.paddingTop = styles.paddingTop;
-    if (styles.paddingRight !== undefined) frame.paddingRight = styles.paddingRight;
-    if (styles.paddingBottom !== undefined) frame.paddingBottom = styles.paddingBottom;
-    if (styles.paddingLeft !== undefined) frame.paddingLeft = styles.paddingLeft;
-
     if (styles.justifyContent) frame.primaryAxisAlignItems = styles.justifyContent;
     frame.counterAxisAlignItems = styles.alignItems === 'STRETCH' ? 'MIN' : (styles.alignItems || 'MIN');
 
     if ((styles.flexWrap === 'WRAP' || styles.display === 'grid') && frame.layoutMode === 'HORIZONTAL') frame.layoutWrap = 'WRAP';
-    if (styles.backgroundColor) frame.fills = [{ type: 'SOLID', color: styles.backgroundColor, opacity: styles.backgroundOpacity ?? 1 }];
-    if (styles.overflow === 'hidden') frame.clipsContent = true;
-    if (styles.borderWidth) {
-        frame.strokeWeight = styles.borderWidth;
-        frame.strokes = [{ type: 'SOLID', color: styles.borderColor || { r: 0.8, g: 0.8, b: 0.8 } }];
-    }
-    if (styles.borderRadius !== undefined) frame.cornerRadius = styles.borderRadius;
-    if (styles.borderRadiusTL !== undefined) frame.topLeftRadius = styles.borderRadiusTL;
-    if (styles.borderRadiusTR !== undefined) frame.topRightRadius = styles.borderRadiusTR;
-    if (styles.borderRadiusBR !== undefined) frame.bottomRightRadius = styles.borderRadiusBR;
-    if (styles.borderRadiusBL !== undefined) frame.bottomLeftRadius = styles.borderRadiusBL;
-    if (styles.shadows) frame.effects = styles.shadows;
-    if (styles.opacity !== undefined) frame.opacity = styles.opacity;
+
+    applyFrameStyles(frame, styles);
 
     if ((element.tagName === 'input' || element.tagName === 'textarea') && element.attributes['placeholder']) {
         const placeholderText = figma.createText();

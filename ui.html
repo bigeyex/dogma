@@ -686,21 +686,6 @@
       return iconMap;
     };
 
-    // Conversion logic
-    document.getElementById('convert').onclick = async () => {
-      const html = document.getElementById('html-input').value;
-      const viewport = document.querySelector('input[name="viewport"]:checked').value;
-      const status = document.getElementById('tailwind-status');
-      const t = translations[settings.language];
-
-      if (!html) return;
-      status.textContent = t.processingIcons;
-      const iconMap = await getIconsMap(html);
-
-      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
-      status.textContent = t.sentToFigma;
-      setTimeout(() => { status.textContent = ''; }, 2000);
-    };
 
     document.getElementById('stop-btn').onclick = () => {
       if (abortController) {
@@ -904,7 +889,7 @@
             messages: [
               {
                 role: 'system',
-                content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Do NOT generate a tailwind.config.js file. Use arbitrary values for specific colors (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 8. Prefer Flexbox over Grid for all layouts. Use Grid only if absolutely necessary for complex two-dimensional structures.`
+                content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. Use Grid ONLY as a last resort for extremely complex 2D structures.`
               },
               { role: 'user', content: prompt }
             ]

@@ -1,7 +1,7 @@
 import { parseHTML, resolveClasses } from './parser';
 import { parseTailwindConfig } from './utils';
-import { buildFigmaNode, applySizingConstraints, applyLayoutConstraints } from './builder';
-import { ParsedElement } from './types';
+import { buildFigmaNode, applyFrameStyles, applySizingConstraints, applyLayoutConstraints } from './builder';
+import { ParsedElement, ResolvedStyles } from './types';
 
 figma.showUI(__html__, { width: 400, height: 560 });
 
@@ -60,41 +60,47 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
             }
 
             const pageTitle = findTitle(elements) || 'Web Page';
-            let targetElements = elements;
             const bodyElement = findBody(elements);
-            if (bodyElement) targetElements = bodyElement.children;
+            const targetElements = bodyElement ? bodyElement.children : elements;
 
             const isDesktop = msg.viewport === 'desktop';
-            const artboardWidth = isDesktop ? 1440 : 375;
+            const screenWidth = isDesktop ? 1440 : 375;
+            const artboardWidth = screenWidth;
+
+            // Resolve body styles if present
+            const bodyStyles = bodyElement ? resolveClasses(bodyElement.classes, customColors, screenWidth) : {} as ResolvedStyles;
 
             const artboard = figma.createFrame();
-            artboard.name = pageTitle;
+            artboard.name = bodyElement ? 'Body' : (isDesktop ? 'Desktop View' : 'Mobile View');
 
+            // Placement Logic
             const selection = figma.currentPage.selection;
             if (selection.length > 0) {
-                const lastNode = selection[selection.length - 1];
-                artboard.x = lastNode.x + lastNode.width + 30;
-                artboard.y = lastNode.y;
+                let targetNode = selection[selection.length - 1];
+                while (targetNode.parent && targetNode.parent.type !== 'PAGE') {
+                    targetNode = targetNode.parent as any;
+                }
+                artboard.x = targetNode.x + targetNode.width + 30;
+                artboard.y = targetNode.y;
             } else {
                 artboard.x = figma.viewport.center.x - (artboardWidth / 2);
                 artboard.y = figma.viewport.center.y - 400;
             }
 
-            artboard.layoutMode = 'VERTICAL';
-            artboard.resize(artboardWidth, artboard.height);
-            artboard.layoutSizingHorizontal = 'FIXED';
-            artboard.layoutSizingVertical = 'HUG';
+            // Artboard sizing and styling
+            artboard.resize(artboardWidth, bodyStyles.minHeight || 800);
+            applyFrameStyles(artboard, bodyStyles);
 
+            artboard.layoutMode = 'VERTICAL';
             artboard.itemSpacing = 0;
-            artboard.paddingTop = 0;
-            artboard.paddingRight = 0;
-            artboard.paddingBottom = 0;
-            artboard.paddingLeft = 0;
-            artboard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+            artboard.primaryAxisSizingMode = 'AUTO';
+            artboard.counterAxisSizingMode = 'FIXED';
+            artboard.clipsContent = true;
+
             figma.currentPage.appendChild(artboard);
 
-            for (const element of targetElements) {
-                const result = await buildFigmaNode(element, customColors, iconMap, artboardWidth, artboardWidth);
+            for (const child of targetElements) {
+                const result = await buildFigmaNode(child, customColors, iconMap, artboardWidth, screenWidth, bodyStyles);
                 if (result) {
                     artboard.appendChild(result.node);
                     nodes.push(result.node);
@@ -111,6 +117,7 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
 
         } catch (error) {
             figma.notify('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            console.error(error);
         }
     }
 };
