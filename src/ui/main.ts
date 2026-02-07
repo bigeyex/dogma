@@ -38,6 +38,21 @@ tabs.forEach(tab => {
    ============================================================================ */
 window.onmessage = (event) => {
     const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    // Handle tailwind-result from Figma
+    if (msg.type === 'tailwind-result') {
+        const status = document.getElementById('tailwind-status')!;
+        const t = translations[settings.language];
+        if (msg.error === 'no-selection') {
+            status.textContent = t.selectFrame;
+        } else {
+            (document.getElementById('html-input') as HTMLTextAreaElement).value = msg.html || '';
+            status.textContent = '';
+        }
+        return;
+    }
+
     if (msg.type === 'load-settings' && msg.settings) {
         settings = Object.assign({}, settings, msg.settings);
         if (!settings.language) settings.language = 'zh-CN';
@@ -311,8 +326,11 @@ document.getElementById('build-btn')!.onclick = async () => {
     }
 };
 
-document.getElementById('cancel-tailwind')!.onclick = () => {
-    parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+document.getElementById('figma-to-tailwind-btn')!.onclick = () => {
+    const status = document.getElementById('tailwind-status')!;
+    const t = translations[settings.language];
+    status.textContent = t.converting;
+    parent.postMessage({ pluginMessage: { type: 'figma-to-tailwind' } }, '*');
 };
 
 /* ============================================================================

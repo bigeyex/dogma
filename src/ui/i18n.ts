@@ -15,7 +15,9 @@ export const translations: Record<string, any> = {
         tailwindDesc: '粘贴豆包应用生成的代码，转换为Figma设计稿。',
         htmlPlaceholder: '<div class="flex flex-col gap-4 p-6 bg-gray-900">...</div>',
         convertBtn: '转换',
-        cancelBtn: '取消',
+        figmaToTailwind: 'Figma → Tailwind',
+        selectFrame: '请先选中一个图层',
+        converting: '转换中...',
         settingsTitle: '设置',
         settingsDesc: '配置您的火山引擎 Ark 凭据。',
         language: '语言',
@@ -58,7 +60,9 @@ export const translations: Record<string, any> = {
         tailwindDesc: 'Convert existing Tailwind HTML to Figma layers.',
         htmlPlaceholder: '<div class="flex flex-col gap-4 p-6 bg-gray-900">...</div>',
         convertBtn: 'Convert',
-        cancelBtn: 'Cancel',
+        figmaToTailwind: 'Figma → Tailwind',
+        selectFrame: 'Please select a frame',
+        converting: 'Converting...',
         settingsTitle: 'Settings',
         settingsDesc: 'Configure your VolcEngine Ark credentials.',
         language: 'Language',
@@ -117,7 +121,7 @@ export function updateUI(settings: any) {
     document.querySelector('label[for="desktop"]')!.textContent = t.desktop;
     (document.getElementById('html-input') as HTMLTextAreaElement).placeholder = t.htmlPlaceholder;
     document.getElementById('convert')!.textContent = t.convertBtn;
-    document.getElementById('cancel-tailwind')!.textContent = t.cancelBtn;
+    document.getElementById('figma-to-tailwind-btn')!.textContent = t.figmaToTailwind;
 
     // Settings Tab
     document.querySelector('#settings-tab h2')!.textContent = t.settingsTitle;

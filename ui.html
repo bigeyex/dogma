@@ -362,7 +362,7 @@ button.loading .spinner {
 
     <div class="btn-group">
       <button id="convert" class="btn-primary">Convert</button>
-      <button id="cancel-tailwind" class="btn-secondary">Cancel</button>
+      <button id="figma-to-tailwind-btn" class="btn-secondary">Figma → Tailwind</button>
     </div>
     <div id="tailwind-status" class="status"></div>
   </div>
@@ -465,7 +465,7 @@ button.loading .spinner {
     document.querySelector('label[for="desktop"]').textContent = t.desktop;
     document.getElementById("html-input").placeholder = t.htmlPlaceholder;
     document.getElementById("convert").textContent = t.convertBtn;
-    document.getElementById("cancel-tailwind").textContent = t.cancelBtn;
+    document.getElementById("figma-to-tailwind-btn").textContent = t.figmaToTailwind;
     document.querySelector("#settings-tab h2").textContent = t.settingsTitle;
     document.querySelector("#settings-tab .description").textContent = t.settingsDesc;
     document.querySelector('label[data-i18n="language"]').textContent = t.language;
@@ -496,7 +496,9 @@ button.loading .spinner {
           tailwindDesc: "\u7C98\u8D34\u8C46\u5305\u5E94\u7528\u751F\u6210\u7684\u4EE3\u7801\uFF0C\u8F6C\u6362\u4E3AFigma\u8BBE\u8BA1\u7A3F\u3002",
           htmlPlaceholder: '<div class="flex flex-col gap-4 p-6 bg-gray-900">...</div>',
           convertBtn: "\u8F6C\u6362",
-          cancelBtn: "\u53D6\u6D88",
+          figmaToTailwind: "Figma \u2192 Tailwind",
+          selectFrame: "\u8BF7\u5148\u9009\u4E2D\u4E00\u4E2A\u56FE\u5C42",
+          converting: "\u8F6C\u6362\u4E2D...",
           settingsTitle: "\u8BBE\u7F6E",
           settingsDesc: "\u914D\u7F6E\u60A8\u7684\u706B\u5C71\u5F15\u64CE Ark \u51ED\u636E\u3002",
           language: "\u8BED\u8A00",
@@ -539,7 +541,9 @@ button.loading .spinner {
           tailwindDesc: "Convert existing Tailwind HTML to Figma layers.",
           htmlPlaceholder: '<div class="flex flex-col gap-4 p-6 bg-gray-900">...</div>',
           convertBtn: "Convert",
-          cancelBtn: "Cancel",
+          figmaToTailwind: "Figma \u2192 Tailwind",
+          selectFrame: "Please select a frame",
+          converting: "Converting...",
           settingsTitle: "Settings",
           settingsDesc: "Configure your VolcEngine Ark credentials.",
           language: "Language",
@@ -666,6 +670,18 @@ button.loading .spinner {
       });
       window.onmessage = (event) => {
         const msg = event.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "tailwind-result") {
+          const status = document.getElementById("tailwind-status");
+          const t = translations[settings.language];
+          if (msg.error === "no-selection") {
+            status.textContent = t.selectFrame;
+          } else {
+            document.getElementById("html-input").value = msg.html || "";
+            status.textContent = "";
+          }
+          return;
+        }
         if (msg.type === "load-settings" && msg.settings) {
           settings = Object.assign({}, settings, msg.settings);
           if (!settings.language) settings.language = "zh-CN";
@@ -906,8 +922,11 @@ button.loading .spinner {
           abortController = null;
         }
       });
-      document.getElementById("cancel-tailwind").onclick = () => {
-        parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
+      document.getElementById("figma-to-tailwind-btn").onclick = () => {
+        const status = document.getElementById("tailwind-status");
+        const t = translations[settings.language];
+        status.textContent = t.converting;
+        parent.postMessage({ pluginMessage: { type: "figma-to-tailwind" } }, "*");
       };
       document.getElementById("convert").onclick = () => __async(null, null, function* () {
         const html = document.getElementById("html-input").value;

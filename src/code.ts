@@ -2,6 +2,7 @@ import { parseHTML, resolveClasses } from './parser';
 import { parseTailwindConfig } from './utils';
 import { buildFigmaNode, applyFrameStyles, applySizingConstraints, applyLayoutConstraints, applyAbsolutePositioning } from './builder';
 import { ParsedElement, ResolvedStyles } from './types';
+import { figmaToTailwind } from './figma-to-tailwind';
 
 figma.showUI(__html__, { width: 400, height: 560 });
 
@@ -14,6 +15,19 @@ figma.clientStorage.getAsync('llm-settings').then(settings => {
 figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: string; icons?: Record<string, string>; settings?: any }) => {
     if (msg.type === 'cancel') {
         figma.closePlugin();
+        return;
+    }
+
+    if (msg.type === 'figma-to-tailwind') {
+        const selection = figma.currentPage.selection;
+        if (selection.length === 0) {
+            figma.ui.postMessage({ type: 'tailwind-result', html: '', error: 'no-selection' });
+            return;
+        }
+        const node = selection[0];
+        const html = figmaToTailwind(node);
+        figma.ui.postMessage({ type: 'tailwind-result', html });
+        figma.notify('✓ Converted to Tailwind HTML');
         return;
     }
 
