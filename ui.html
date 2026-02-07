@@ -3,6 +3,9 @@
 
 <head>
   <style>
+    /* ============================================================================
+       RESET & BASE STYLES
+       ============================================================================ */
     * {
       box-sizing: border-box;
       margin: 0;
@@ -19,7 +22,9 @@
       overflow: hidden;
     }
 
-    /* Tabs */
+    /* ============================================================================
+       TABS & NAVIGATION
+       ============================================================================ */
     .tabs {
       display: flex;
       background: #121225;
@@ -56,6 +61,9 @@
       display: block;
     }
 
+    /* ============================================================================
+       TYPOGRAPHY & FORMS
+       ============================================================================ */
     h2 {
       font-size: 16px;
       font-weight: 600;
@@ -113,6 +121,9 @@
       border-color: #3b82f6;
     }
 
+    /* ============================================================================
+       CONTROLS & TOGGLES
+       ============================================================================ */
     .controls {
       display: flex;
       margin-bottom: 12px;
@@ -163,6 +174,9 @@
       cursor: pointer;
     }
 
+    /* ============================================================================
+       BUTTONS
+       ============================================================================ */
     .btn-group {
       display: flex;
       gap: 8px;
@@ -208,6 +222,9 @@
       background: #444;
     }
 
+    /* ============================================================================
+       STATUS & FEEDBACK
+       ============================================================================ */
     .status {
       margin-top: 12px;
       font-size: 11px;
@@ -392,7 +409,23 @@
   </div>
 
   <script>
-    // Tab Switching
+    /* ============================================================================
+       STATE & CONFIGURATION
+       ============================================================================ */
+    let settings = {
+      provider: 'volcengine',
+      chatModelId: 'doubao-seed-1-8-251228',
+      codingModelId: 'doubao-seed-code-preview-251028',
+      apiKey: '',
+      language: 'zh-CN'
+    };
+
+    let abortController = null;
+    let lastGeneratedCode = "";
+
+    /* ============================================================================
+       TAB MANAGEMENT
+       ============================================================================ */
     const tabs = document.querySelectorAll('.tab');
     const tabContents = document.querySelectorAll('.tab-content');
 
@@ -406,15 +439,9 @@
       };
     });
 
-    // Settings logic
-    let settings = {
-      provider: 'volcengine',
-      chatModelId: 'doubao-seed-1-8-251228',
-      codingModelId: 'doubao-seed-code-preview-251028',
-      apiKey: '',
-      language: 'zh-CN'
-    };
-
+    /* ============================================================================
+       TRANSLATIONS & LOCALIZATION
+       ============================================================================ */
     const translations = {
       'zh-CN': {
         builderTab: '构建器',
@@ -547,27 +574,7 @@
       document.getElementById('save-settings').textContent = t.saveSettings;
     }
 
-    document.getElementById('language').onchange = (e) => {
-      settings.language = e.target.value;
-      updateUI();
-    };
-
-    document.getElementById('save-settings').onclick = () => {
-      settings.language = document.getElementById('language').value;
-      settings.provider = document.getElementById('provider').value;
-      settings.chatModelId = document.getElementById('chat-model-id').value;
-      settings.codingModelId = document.getElementById('coding-model-id').value;
-      settings.apiKey = document.getElementById('api-key').value;
-      settings.thinking = document.getElementById('thinking-checkbox').checked;
-
-      parent.postMessage({ pluginMessage: { type: 'save-settings', settings } }, '*');
-
-      const t = translations[settings.language];
-      document.getElementById('settings-status').textContent = t.settingsSaved;
-      setTimeout(() => { document.getElementById('settings-status').textContent = ''; }, 2000);
-    };
-
-    // Load initial settings
+    // Load initial settings from Figma storage
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       if (msg.type === 'load-settings' && msg.settings) {
@@ -593,7 +600,32 @@
       }
     };
 
-    // Get Font Awesome icons from HTML
+    /* ============================================================================
+       SETTINGS LOGIC
+       ============================================================================ */
+    document.getElementById('language').onchange = (e) => {
+      settings.language = e.target.value;
+      updateUI();
+    };
+
+    document.getElementById('save-settings').onclick = () => {
+      settings.language = document.getElementById('language').value;
+      settings.provider = document.getElementById('provider').value;
+      settings.chatModelId = document.getElementById('chat-model-id').value;
+      settings.codingModelId = document.getElementById('coding-model-id').value;
+      settings.apiKey = document.getElementById('api-key').value;
+      settings.thinking = document.getElementById('thinking-checkbox').checked;
+
+      parent.postMessage({ pluginMessage: { type: 'save-settings', settings } }, '*');
+
+      const t = translations[settings.language];
+      document.getElementById('settings-status').textContent = t.settingsSaved;
+      setTimeout(() => { document.getElementById('settings-status').textContent = ''; }, 2000);
+    };
+
+    /* ============================================================================
+       UTILITIES & ICON FETCHING
+       ============================================================================ */
     const getIconsMap = async (html) => {
       const iconMap = {};
       // Matches class="... fa fa-icon ..." or class="... fa-icon ..."
@@ -670,10 +702,15 @@
       setTimeout(() => { status.textContent = ''; }, 2000);
     };
 
-    // AI Builder logic
-    let abortController = null;
-    let lastGeneratedCode = "";
+    document.getElementById('stop-btn').onclick = () => {
+      if (abortController) {
+        abortController.abort();
+      }
+    };
 
+    /* ============================================================================
+       AI BUILDER HANDLERS
+       ============================================================================ */
     const copyBtn = document.getElementById('copy-btn');
     copyBtn.onclick = () => {
       if (!lastGeneratedCode) return;
@@ -949,6 +986,24 @@
 
     document.getElementById('cancel-tailwind').onclick = () => {
       parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+    };
+
+    /* ============================================================================
+       TAILWIND CONVERTER HANDLERS
+       ============================================================================ */
+    document.getElementById('convert').onclick = async () => {
+      const html = document.getElementById('html-input').value;
+      const viewport = document.querySelector('input[name="viewport"]:checked').value;
+      const status = document.getElementById('tailwind-status');
+      const t = translations[settings.language];
+
+      if (!html) return;
+      status.textContent = t.processingIcons;
+      const iconMap = await getIconsMap(html);
+
+      parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
+      status.textContent = t.sentToFigma;
+      setTimeout(() => { status.textContent = ''; }, 2000);
     };
   </script>
 </body>
