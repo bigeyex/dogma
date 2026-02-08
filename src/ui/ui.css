@@ -117,6 +117,69 @@ textarea:focus {
 }
 
 /* ============================================================================
+   REFERENCE LIST STYLES
+   ============================================================================ */
+.ref-list-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.ref-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ref-item {
+    background: #2a2a4a;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: #ccc;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid #333;
+}
+
+.ref-item .remove-btn {
+    cursor: pointer;
+    color: #888;
+    display: flex;
+    align-items: center;
+}
+
+.ref-item .remove-btn:hover {
+    color: #ef4444;
+}
+
+.add-ref-btn {
+    background: #2a2a4a;
+    color: #ccc;
+    border: 1px dashed #444;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    height: 22px;
+    width: auto;
+    flex: none;
+    transition: all 0.2s;
+}
+
+.add-ref-btn:hover {
+    border-color: #3b82f6;
+    color: #fff;
+    background: #333355;
+}
+
+.add-ref-btn svg {
+    margin-right: 2px;
+}
+
+/* ============================================================================
    CONTROLS & TOGGLES
    ============================================================================ */
 .controls {

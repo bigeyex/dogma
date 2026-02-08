@@ -47,6 +47,10 @@
     document.getElementById("token-counter").textContent = `0 ${t.tokens}`;
     const thinkingLabelSpan = document.querySelector("label.checkbox-group span");
     if (thinkingLabelSpan) thinkingLabelSpan.textContent = t.thinkingLabel;
+    const addRefBtn = document.getElementById("add-ref-btn");
+    if (addRefBtn) {
+      addRefBtn.childNodes[2].textContent = t.refStyle;
+    }
     document.querySelector("#tailwind-tab h2").textContent = t.tailwindTitle;
     document.querySelector("#tailwind-tab .description").textContent = t.tailwindDesc;
     document.querySelector('label[for="mobile"]').textContent = t.mobile;
@@ -111,7 +115,11 @@
           tokens: "\u4EE4\u724C",
           aiThinking: "AI \u6B63\u5728\u601D\u8003...",
           generating: "\u6B63\u5728\u751F\u6210...",
-          thinkingLabel: "\u6DF1\u5EA6\u601D\u8003"
+          thinkingLabel: "\u6DF1\u5EA6\u601D\u8003",
+          refStyle: "\u53C2\u8003\u6837\u5F0F",
+          uploadingImage: "\u6B63\u5728\u4E0A\u4F20\u56FE\u7247...",
+          noFrameSelected: "\u8BF7\u5148\u9009\u4E2D\u4E00\u4E2A\u56FE\u5C42 (Frame)",
+          refAdded: "\u5DF2\u6DFB\u52A0\u53C2\u8003"
         },
         "en-US": {
           builderTab: "Builder",
@@ -156,7 +164,11 @@
           tokens: "tokens",
           aiThinking: "AI is thinking...",
           generating: "Generating...",
-          thinkingLabel: "Thinking"
+          thinkingLabel: "Thinking",
+          refStyle: "Ref Style",
+          uploadingImage: "Uploading image...",
+          noFrameSelected: "Please select a frame",
+          refAdded: "Reference added"
         }
       };
     }
@@ -243,6 +255,7 @@
         language: "zh-CN",
         thinking: true
       };
+      var styleRefs = [];
       var abortController = null;
       var lastGeneratedCode = "";
       var tabs = document.querySelectorAll(".tab");
@@ -283,10 +296,46 @@
           const thinkingCheckbox = document.getElementById("thinking-checkbox");
           if (thinkingCheckbox) thinkingCheckbox.checked = settings.thinking !== false;
           updateUI(settings);
+        } else if (msg.type === "export-frame-result") {
+          const t = translations[settings.language];
+          const status = document.getElementById("builder-status");
+          if (msg.error) {
+            status.textContent = msg.error === "no-selection" ? t.noFrameSelected : t.noFrameSelected;
+            status.style.display = "block";
+            return;
+          }
+          if (styleRefs.some((ref) => ref.id === msg.id)) {
+            return;
+          }
+          styleRefs.push({
+            id: msg.id,
+            name: msg.name,
+            imageData: msg.imageData
+          });
+          updateRefList();
         } else {
           updateUI(settings);
         }
       };
+      function updateRefList() {
+        const container = document.getElementById("ref-items");
+        container.innerHTML = "";
+        styleRefs.forEach((ref, index) => {
+          const item = document.createElement("div");
+          item.className = "ref-item";
+          item.innerHTML = `
+            <span>${ref.name.substring(0, 6)}</span>
+            <span class="remove-btn" data-index="${index}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </span>
+        `;
+          item.querySelector(".remove-btn").addEventListener("click", () => {
+            styleRefs.splice(index, 1);
+            updateRefList();
+          });
+          container.appendChild(item);
+        });
+      }
       document.getElementById("language").onchange = (e) => {
         settings.language = e.target.value;
         updateUI(settings);
@@ -320,6 +369,9 @@
         setTimeout(() => {
           copyBtn.innerHTML = originalHTML;
         }, 2e3);
+      };
+      document.getElementById("add-ref-btn").onclick = () => {
+        parent.postMessage({ pluginMessage: { type: "export-frame-image" } }, "*");
       };
       document.getElementById("stop-btn").onclick = () => {
         if (abortController) {
@@ -383,6 +435,15 @@
         document.getElementById("thinking-status").textContent = t.expandingPrompt;
         abortController = new AbortController();
         try {
+          const messageContent = [];
+          styleRefs.forEach((ref) => {
+            messageContent.push({
+              type: "image_url",
+              image_url: { url: `data:image/png;base64,${ref.imageData}` }
+            });
+          });
+          const styleInstruction = styleRefs.length > 0 ? "[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated requirement, but follow the text instructions for content and structure.]\n\n" : "";
+          messageContent.push({ type: "text", text: styleInstruction + prompt });
           const response = yield fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
             method: "POST",
             signal: abortController.signal,
@@ -399,7 +460,7 @@
                   role: "system",
                   content: `You are an expert product manager and UX designer. TASK: Expand the user's short description into a detailed requirement document for a web page design in Figma. Focus on: 1. UI components (e.g., sections, buttons, input fields, text blocks). 2. One or two sentences about the task the user is going to accomplish. IMPORTANT: Do NOT include detailed colors, typography specs, or style descriptions (e.g., "blue gradient", "rounded corners"). Return ONLY the expanded description text, no intro/outro. OUTPUT LANGUAGE: ${settings.language === "zh-CN" ? "Chinese (Simplified)" : "English"}`
                 },
-                { role: "user", content: prompt }
+                { role: "user", content: messageContent }
               ]
             })
           });
@@ -459,6 +520,17 @@
         abortController = new AbortController();
         const viewportDesc = viewport === "mobile" ? "Target Viewport: Mobile (375px width). Use single-column layouts, larger touch targets, and vertical stacking." : "Target Viewport: Desktop (1440px width). Use multi-column layouts, horizontal alignment, and whitespace effectively.";
         try {
+          const messageContent = [];
+          styleRefs.forEach((ref) => {
+            messageContent.push({
+              type: "image_url",
+              image_url: { url: `data:image/png;base64,${ref.imageData}` }
+            });
+          });
+          const styleInstruction = styleRefs.length > 0 ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated design, but follow the text instructions for content and structure. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}.]
+
+` : "";
+          messageContent.push({ type: "text", text: styleInstruction + prompt });
           const response = yield fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
             method: "POST",
             signal: abortController.signal,
@@ -475,7 +547,7 @@
                   role: "system",
                   content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === "zh-CN" ? "Chinese (Simplified)" : "English"}. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. Use Grid ONLY as a last resort for extremely complex 2D structures.`
                 },
-                { role: "user", content: prompt }
+                { role: "user", content: messageContent }
               ]
             })
           });

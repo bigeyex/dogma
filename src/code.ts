@@ -139,5 +139,36 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
             figma.notify('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
             console.error(error);
         }
+        return;
+    }
+
+    if (msg.type === 'export-frame-image') {
+        const selection = figma.currentPage.selection;
+        if (selection.length === 0) {
+            figma.ui.postMessage({ type: 'export-frame-result', error: 'no-selection' });
+            return;
+        }
+
+        const node = selection[0];
+        if (node.type !== 'FRAME' && node.type !== 'COMPONENT' && node.type !== 'INSTANCE') {
+            figma.ui.postMessage({ type: 'export-frame-result', error: 'not-a-frame' });
+            return;
+        }
+
+        try {
+            const bytes = await node.exportAsync({
+                format: 'PNG',
+                constraint: { type: 'SCALE', value: 0.5 } // Compress to reduce tokens
+            });
+            const base64 = figma.base64Encode(bytes);
+            figma.ui.postMessage({
+                type: 'export-frame-result',
+                id: node.id,
+                name: node.name,
+                imageData: base64
+            });
+        } catch (error) {
+            figma.notify('Failed to export frame: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
     }
 };

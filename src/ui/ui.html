@@ -20,6 +20,17 @@
     <p class="description">AI will generate Tailwind HTML based on your prompt.</p>
 
     <div class="form-group">
+      <div id="ref-list-container" class="ref-list-container">
+        <div id="ref-items"></div>
+        <button id="add-ref-btn" class="add-ref-btn" title="Add selected frame as style reference">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Ref Style
+        </button>
+      </div>
       <textarea id="prompt-input"
         placeholder="e.g. A premium landing page hero section with a dark theme, a vibrant call-to-action button, and a feature list."></textarea>
     </div>

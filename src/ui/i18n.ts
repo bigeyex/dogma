@@ -42,7 +42,11 @@ export const translations: Record<string, any> = {
         tokens: '令牌',
         aiThinking: 'AI 正在思考...',
         generating: '正在生成...',
-        thinkingLabel: '深度思考'
+        thinkingLabel: '深度思考',
+        refStyle: '参考样式',
+        uploadingImage: '正在上传图片...',
+        noFrameSelected: '请先选中一个图层 (Frame)',
+        refAdded: '已添加参考'
     },
     'en-US': {
         builderTab: 'Builder',
@@ -87,7 +91,11 @@ export const translations: Record<string, any> = {
         tokens: 'tokens',
         aiThinking: 'AI is thinking...',
         generating: 'Generating...',
-        thinkingLabel: 'Thinking'
+        thinkingLabel: 'Thinking',
+        refStyle: 'Ref Style',
+        uploadingImage: 'Uploading image...',
+        noFrameSelected: 'Please select a frame',
+        refAdded: 'Reference added'
     }
 };
 
@@ -113,6 +121,12 @@ export function updateUI(settings: any) {
     document.getElementById('token-counter')!.textContent = `0 ${t.tokens}`;
     const thinkingLabelSpan = document.querySelector('label.checkbox-group span');
     if (thinkingLabelSpan) thinkingLabelSpan.textContent = t.thinkingLabel;
+
+    // Style Ref
+    const addRefBtn = document.getElementById('add-ref-btn');
+    if (addRefBtn) {
+        addRefBtn.childNodes[2].textContent = t.refStyle;
+    }
 
     // Tailwind Tab
     document.querySelector('#tailwind-tab h2')!.textContent = t.tailwindTitle;
