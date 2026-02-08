@@ -73,11 +73,11 @@
       "use strict";
       translations = {
         "zh-CN": {
-          builderTab: "\u6784\u5EFA\u5668",
+          builderTab: "\u751F\u6210\u8BBE\u8BA1",
           tailwindTab: "Tailwind",
           settingsTab: "\u8BBE\u7F6E",
-          aiBuilderTitle: "AI \u6784\u5EFA\u5668",
-          aiBuilderDesc: "AI \u5C06\u6839\u636E\u60A8\u7684\u63CF\u8FF0\u751F\u6210 Tailwind HTML\u3002",
+          aiBuilderTitle: "\u751F\u6210\u8BBE\u8BA1",
+          aiBuilderDesc: "\u6839\u636E\u63D0\u793A\u8BCD\u751F\u6210\u8BBE\u8BA1\u7A3F\u3002\u65B0\u751F\u6210\u5185\u5BB9\u4F1A\u51FA\u73B0\u5728\u9009\u4E2DFrame\u53F3\u4FA7",
           promptPlaceholder: "\u4F8B\u5982\uFF1A\u4E00\u4E2A\u5E26\u6709\u6DF1\u8272\u4E3B\u9898\u3001\u9192\u76EE\u7684\u53F7\u53EC\u6027\u7528\u8BED\u6309\u94AE\u548C\u529F\u80FD\u5217\u8868\u7684\u9AD8\u7EA7\u7740\u9646\u9875\u82F1\u96C4\u90E8\u5206\u3002",
           mobile: "\u{1F4F1} \u624B\u673A",
           desktop: "\u{1F5A5}\uFE0F \u684C\u9762",
@@ -299,19 +299,34 @@
         } else if (msg.type === "export-frame-result") {
           const t = translations[settings.language];
           const status = document.getElementById("builder-status");
+          const loadingIndex = styleRefs.findIndex((ref) => ref.loading);
           if (msg.error) {
+            if (loadingIndex !== -1) styleRefs.splice(loadingIndex, 1);
             status.textContent = msg.error === "no-selection" ? t.noFrameSelected : t.noFrameSelected;
             status.style.display = "block";
+            updateRefList();
             return;
           }
           if (styleRefs.some((ref) => ref.id === msg.id)) {
+            if (loadingIndex !== -1) styleRefs.splice(loadingIndex, 1);
+            updateRefList();
             return;
           }
-          styleRefs.push({
-            id: msg.id,
-            name: msg.name,
-            imageData: msg.imageData
-          });
+          if (loadingIndex !== -1) {
+            styleRefs[loadingIndex] = {
+              id: msg.id,
+              name: msg.name,
+              imageData: msg.imageData,
+              loading: false
+            };
+          } else {
+            styleRefs.push({
+              id: msg.id,
+              name: msg.name,
+              imageData: msg.imageData,
+              loading: false
+            });
+          }
           updateRefList();
         } else {
           updateUI(settings);
@@ -323,16 +338,20 @@
         styleRefs.forEach((ref, index) => {
           const item = document.createElement("div");
           item.className = "ref-item";
-          item.innerHTML = `
-            <span>${ref.name.substring(0, 6)}</span>
-            <span class="remove-btn" data-index="${index}">
+          const name = ref.loading ? "..." : (ref.name || "").substring(0, 6);
+          const actionHtml = ref.loading ? '<div class="item-spinner"></div>' : `<span class="remove-btn" data-index="${index}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </span>
+               </span>`;
+          item.innerHTML = `
+            <span>${name}</span>
+            ${actionHtml}
         `;
-          item.querySelector(".remove-btn").addEventListener("click", () => {
-            styleRefs.splice(index, 1);
-            updateRefList();
-          });
+          if (!ref.loading) {
+            item.querySelector(".remove-btn").addEventListener("click", () => {
+              styleRefs.splice(index, 1);
+              updateRefList();
+            });
+          }
           container.appendChild(item);
         });
       }
@@ -371,6 +390,9 @@
         }, 2e3);
       };
       document.getElementById("add-ref-btn").onclick = () => {
+        if (styleRefs.some((ref) => ref.loading)) return;
+        styleRefs.push({ name: "Loading", loading: true });
+        updateRefList();
         parent.postMessage({ pluginMessage: { type: "export-frame-image" } }, "*");
       };
       document.getElementById("stop-btn").onclick = () => {
@@ -436,7 +458,7 @@
         abortController = new AbortController();
         try {
           const messageContent = [];
-          styleRefs.forEach((ref) => {
+          styleRefs.filter((ref) => !ref.loading && ref.imageData).forEach((ref) => {
             messageContent.push({
               type: "image_url",
               image_url: { url: `data:image/png;base64,${ref.imageData}` }
@@ -521,7 +543,7 @@
         const viewportDesc = viewport === "mobile" ? "Target Viewport: Mobile (375px width). Use single-column layouts, larger touch targets, and vertical stacking." : "Target Viewport: Desktop (1440px width). Use multi-column layouts, horizontal alignment, and whitespace effectively.";
         try {
           const messageContent = [];
-          styleRefs.forEach((ref) => {
+          styleRefs.filter((ref) => !ref.loading && ref.imageData).forEach((ref) => {
             messageContent.push({
               type: "image_url",
               image_url: { url: `data:image/png;base64,${ref.imageData}` }

@@ -13,7 +13,7 @@ let settings = {
     thinking: true
 };
 
-let styleRefs: Array<{ id: string, name: string, imageData: string }> = [];
+let styleRefs: Array<{ id?: string, name: string, imageData?: string, loading?: boolean }> = [];
 
 let abortController: AbortController | null = null;
 let lastGeneratedCode = "";
@@ -76,21 +76,39 @@ window.onmessage = (event) => {
     } else if (msg.type === 'export-frame-result') {
         const t = translations[settings.language];
         const status = document.getElementById('builder-status')!;
+
+        // Find the loading item
+        const loadingIndex = styleRefs.findIndex(ref => ref.loading);
+
         if (msg.error) {
+            if (loadingIndex !== -1) styleRefs.splice(loadingIndex, 1);
             status.textContent = msg.error === 'no-selection' ? t.noFrameSelected : t.noFrameSelected;
             status.style.display = 'block';
+            updateRefList();
             return;
         }
 
         if (styleRefs.some(ref => ref.id === msg.id)) {
+            if (loadingIndex !== -1) styleRefs.splice(loadingIndex, 1);
+            updateRefList();
             return;
         }
 
-        styleRefs.push({
-            id: msg.id,
-            name: msg.name,
-            imageData: msg.imageData
-        });
+        if (loadingIndex !== -1) {
+            styleRefs[loadingIndex] = {
+                id: msg.id,
+                name: msg.name,
+                imageData: msg.imageData,
+                loading: false
+            };
+        } else {
+            styleRefs.push({
+                id: msg.id,
+                name: msg.name,
+                imageData: msg.imageData,
+                loading: false
+            });
+        }
         updateRefList();
     } else {
         updateUI(settings);
@@ -103,16 +121,24 @@ function updateRefList() {
     styleRefs.forEach((ref, index) => {
         const item = document.createElement('div');
         item.className = 'ref-item';
-        item.innerHTML = `
-            <span>${ref.name.substring(0, 6)}</span>
-            <span class="remove-btn" data-index="${index}">
+        const name = ref.loading ? '...' : (ref.name || '').substring(0, 6);
+        const actionHtml = ref.loading
+            ? '<div class="item-spinner"></div>'
+            : `<span class="remove-btn" data-index="${index}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </span>
+               </span>`;
+
+        item.innerHTML = `
+            <span>${name}</span>
+            ${actionHtml}
         `;
-        item.querySelector('.remove-btn')!.addEventListener('click', () => {
-            styleRefs.splice(index, 1);
-            updateRefList();
-        });
+
+        if (!ref.loading) {
+            item.querySelector('.remove-btn')!.addEventListener('click', () => {
+                styleRefs.splice(index, 1);
+                updateRefList();
+            });
+        }
         container.appendChild(item);
     });
 }
@@ -162,6 +188,11 @@ copyBtn.onclick = () => {
 };
 
 document.getElementById('add-ref-btn')!.onclick = () => {
+    // Only allow one loading ref at a time for simplicity and to match Figma selection
+    if (styleRefs.some(ref => ref.loading)) return;
+
+    styleRefs.push({ name: 'Loading', loading: true });
+    updateRefList();
     parent.postMessage({ pluginMessage: { type: 'export-frame-image' } }, '*');
 };
 
@@ -232,7 +263,7 @@ document.getElementById('expand-btn')!.onclick = async () => {
 
     try {
         const messageContent: any[] = [];
-        styleRefs.forEach(ref => {
+        styleRefs.filter(ref => !ref.loading && ref.imageData).forEach(ref => {
             messageContent.push({
                 type: 'image_url',
                 image_url: { url: `data:image/png;base64,${ref.imageData}` }
@@ -327,7 +358,7 @@ document.getElementById('build-btn')!.onclick = async () => {
 
     try {
         const messageContent: any[] = [];
-        styleRefs.forEach(ref => {
+        styleRefs.filter(ref => !ref.loading && ref.imageData).forEach(ref => {
             messageContent.push({
                 type: 'image_url',
                 image_url: { url: `data:image/png;base64,${ref.imageData}` }

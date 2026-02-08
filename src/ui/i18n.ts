@@ -1,10 +1,10 @@
 export const translations: Record<string, any> = {
     'zh-CN': {
-        builderTab: '构建器',
+        builderTab: '生成设计',
         tailwindTab: 'Tailwind',
         settingsTab: '设置',
-        aiBuilderTitle: 'AI 构建器',
-        aiBuilderDesc: 'AI 将根据您的描述生成 Tailwind HTML。',
+        aiBuilderTitle: '生成设计',
+        aiBuilderDesc: '根据提示词生成设计稿。新生成内容会出现在选中Frame右侧',
         promptPlaceholder: '例如：一个带有深色主题、醒目的号召性用语按钮和功能列表的高级着陆页英雄部分。',
         mobile: '📱 手机',
         desktop: '🖥️ 桌面',
