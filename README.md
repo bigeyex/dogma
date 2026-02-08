@@ -1,40 +1,54 @@
-Below are the steps to get your plugin running. You can also find instructions at:
+# Dogma: Doubao Companion to Figma
 
-  https://www.figma.com/plugin-docs/plugin-quickstart-guide/
+Dogma is a powerful Figma plugin that leverages VolcEngine (Ark) AI models to bridge the gap between text descriptions, Tailwind CSS, and Figma designs. It allows designers and developers to generate high-fidelity UI components, refine them with style references, and handle images seamlessly.
 
-This plugin template uses Typescript and NPM, two standard tools in creating JavaScript applications.
+## Key Features
 
-First, download Node.js which comes with NPM. This will allow you to install TypeScript and other
-libraries. You can find the download link here:
+- **🚀 AI Builder**: Generate standalone Tailwind CSS HTML snippets from simple text descriptions.
+- **✨ Prompt Expansion**: Automatically expand brief UI descriptions into detailed requirement documents for better AI generation results.
+- **🎨 Style Reference**: Select existing Figma frames to use as visual references. The AI will analyze the layout, colors, and typography to ensure consistency.
+- **🖼️ Enhanced Image Integration**:
+  - **External URLs**: Automatically fetches images from external `src` URLs.
+  - **AI Generation**: Generates custom visual assets using VolcEngine Seedream based on `alt` descriptions.
+  - **Smart Fallback**: Provides a robust fallback chain (Src > AI Generation > Placeholder) to ensure layouts never break.
+- **🔄 Tailwind ↔ Figma**: 
+  - Convert generated or custom Tailwind code directly into Figma layers.
+  - Convert selected Figma frames back into Tailwind CSS code.
+- **🌍 Internationalization**: Full support for both English (US) and Chinese (Simplified).
+- **⚙️ Configurable Models**: Support for custom Model IDs for Chat, Coding, and Image generation, with smart default fallbacks.
 
-  https://nodejs.org/en/download/
+## Getting Started
 
-Next, install TypeScript using the command:
+### Prerequisites
+- [Node.js](https://nodejs.org/) installed on your machine.
+- A VolcEngine Ark API Key.
 
-  npm install -g typescript
+### Installation
+1. Clone this repository.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Build the plugin:
+   ```bash
+   npm run build
+   # or for development
+   npm run watch
+   ```
+4. In Figma, go to `Plugins > Development > Import plugin from manifest...` and select the `manifest.json` in this directory.
 
-Finally, in the directory of your plugin, get the latest type definitions for the plugin API by running:
+### Configuration
+1. Open the **Settings** tab in the Dogma plugin.
+2. Enter your **VolcEngine API Key**.
+3. (Optional) Configure custom **Model IDs**. If left empty, the plugin will use the recommended defaults.
 
-  npm install --save-dev @figma/plugin-typings
+## Development
 
-If you are familiar with JavaScript, TypeScript will look very familiar. In fact, valid JavaScript code
-is already valid Typescript code.
+- `npm run watch`: Continuously build the plugin and UI as you make changes.
+- `npm run build`: One-time build for production.
+- `src/code.ts`: Main Figma plugin logic (layer creation, messaging).
+- `src/ui/main.ts`: UI logic and AI pipeline orchestration.
+- `src/builder.ts`: Logic for converting HTML/Tailwind to Figma nodes.
 
-TypeScript adds type annotations to variables. This allows code editors such as Visual Studio Code
-to provide information about the Figma API while you are writing code, as well as help catch bugs
-you previously didn't notice.
-
-For more information, visit https://www.typescriptlang.org/
-
-Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
-for the browser to run.
-
-We recommend writing TypeScript code using Visual Studio code:
-
-1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.
-2. Open this directory in Visual Studio Code.
-3. Compile TypeScript to JavaScript: Run the "Terminal > Run Build Task..." menu item,
-    then select "npm: watch". You will have to do this again every time
-    you reopen Visual Studio Code.
-
-That's it! Visual Studio Code will regenerate the JavaScript file every time you save.
+## License
+MIT

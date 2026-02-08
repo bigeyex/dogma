@@ -8,7 +8,7 @@ export const translations: Record<string, any> = {
         promptPlaceholder: '例如：一个带有深色主题、醒目的号召性用语按钮和功能列表的高级着陆页英雄部分。',
         mobile: '📱 手机',
         desktop: '🖥️ 桌面',
-        buildBtn: '在 Figma 中构建',
+        buildBtn: '生成设计',
         expandBtn: '展开描述',
         stopBtn: '停止',
         tailwindTitle: 'Tailwind → Figma',

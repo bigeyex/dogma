@@ -4,15 +4,19 @@ import { getIconsMap } from './ui-icons';
 /* ============================================================================
    STATE & CONFIGURATION
    ============================================================================ */
+export const DEFAULT_CHAT_MODEL = 'doubao-seed-1-8-251228';
+export const DEFAULT_CODING_MODEL = 'doubao-seed-code-preview-251028';
+export const DEFAULT_IMAGE_MODEL = 'doubao-seedream-4-5-251128';
+
 let settings = {
     provider: 'volcengine',
-    chatModelId: 'doubao-seed-1-8-251228',
-    codingModelId: 'doubao-seed-code-preview-251028',
+    chatModelId: '', // Empty means use default
+    codingModelId: '', // Empty means use default
     apiKey: '',
     language: 'zh-CN',
     thinking: true,
     generateImage: false,
-    imageModelId: 'doubao-seedream-4-5-251128'
+    imageModelId: '' // Empty means use default
 };
 
 let styleRefs: Array<{ id?: string, name: string, imageData?: string, loading?: boolean }> = [];
@@ -67,8 +71,8 @@ window.onmessage = (event) => {
 
         (document.getElementById('language') as HTMLSelectElement).value = settings.language;
         (document.getElementById('provider') as HTMLSelectElement).value = settings.provider || 'volcengine';
-        (document.getElementById('chat-model-id') as HTMLInputElement).value = settings.chatModelId;
-        (document.getElementById('coding-model-id') as HTMLInputElement).value = settings.codingModelId;
+        (document.getElementById('chat-model-id') as HTMLInputElement).value = settings.chatModelId || '';
+        (document.getElementById('coding-model-id') as HTMLInputElement).value = settings.codingModelId || '';
         (document.getElementById('api-key') as HTMLInputElement).value = settings.apiKey || '';
 
         const thinkingCheckbox = document.getElementById('thinking-checkbox') as HTMLInputElement;
@@ -77,7 +81,7 @@ window.onmessage = (event) => {
         const generateImageCheckbox = document.getElementById('generate-image-checkbox') as HTMLInputElement;
         if (generateImageCheckbox) generateImageCheckbox.checked = settings.generateImage === true;
 
-        (document.getElementById('image-model-id') as HTMLInputElement).value = settings.imageModelId || 'doubao-seedream-4-5-251128';
+        (document.getElementById('image-model-id') as HTMLInputElement).value = settings.imageModelId || '';
 
         updateUI(settings);
     } else if (msg.type === 'export-frame-result') {
@@ -265,7 +269,7 @@ const processImages = async (html: string, settings: any, abortController: Abort
                         'Authorization': `Bearer ${settings.apiKey}`
                     },
                     body: JSON.stringify({
-                        model: settings.imageModelId,
+                        model: settings.imageModelId || DEFAULT_IMAGE_MODEL,
                         prompt: alt,
                         response_format: 'b64_json'
                     })
@@ -377,7 +381,7 @@ document.getElementById('expand-btn')!.onclick = async () => {
                 'Authorization': `Bearer ${settings.apiKey}`
             },
             body: JSON.stringify({
-                model: settings.chatModelId,
+                model: settings.chatModelId || DEFAULT_CHAT_MODEL,
                 stream: true,
                 thinking: settings.thinking ? undefined : { type: 'disabled' },
                 messages: [
@@ -476,7 +480,7 @@ document.getElementById('build-btn')!.onclick = async () => {
                 'Authorization': `Bearer ${settings.apiKey}`
             },
             body: JSON.stringify({
-                model: settings.codingModelId,
+                model: settings.codingModelId || DEFAULT_CODING_MODEL,
                 stream: true,
                 thinking: settings.thinking ? undefined : { type: 'disabled' },
                 messages: [
