@@ -230,14 +230,22 @@ textarea:focus {
 
 .checkbox-group {
     display: flex;
+    gap: 16px;
     align-items: center;
-    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     color: #888;
 }
 
-.checkbox-group input {
+.checkbox-item input {
+    margin: 0;
     cursor: pointer;
 }
 

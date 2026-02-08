@@ -10,7 +10,9 @@ let settings = {
     codingModelId: 'doubao-seed-code-preview-251028',
     apiKey: '',
     language: 'zh-CN',
-    thinking: true
+    thinking: true,
+    generateImage: false,
+    imageModelId: 'doubao-seedream-4-5-251128'
 };
 
 let styleRefs: Array<{ id?: string, name: string, imageData?: string, loading?: boolean }> = [];
@@ -71,6 +73,11 @@ window.onmessage = (event) => {
 
         const thinkingCheckbox = document.getElementById('thinking-checkbox') as HTMLInputElement;
         if (thinkingCheckbox) thinkingCheckbox.checked = settings.thinking !== false;
+
+        const generateImageCheckbox = document.getElementById('generate-image-checkbox') as HTMLInputElement;
+        if (generateImageCheckbox) generateImageCheckbox.checked = settings.generateImage === true;
+
+        (document.getElementById('image-model-id') as HTMLInputElement).value = settings.imageModelId || 'doubao-seedream-4-5-251128';
 
         updateUI(settings);
     } else if (msg.type === 'export-frame-result') {
@@ -151,6 +158,14 @@ document.getElementById('language')!.onchange = (e) => {
     updateUI(settings);
 };
 
+document.getElementById('thinking-checkbox')!.onchange = (e) => {
+    settings.thinking = (e.target as HTMLInputElement).checked;
+};
+
+document.getElementById('generate-image-checkbox')!.onchange = (e) => {
+    settings.generateImage = (e.target as HTMLInputElement).checked;
+};
+
 document.getElementById('save-settings')!.onclick = () => {
     settings.language = (document.getElementById('language') as HTMLSelectElement).value;
     settings.provider = (document.getElementById('provider') as HTMLSelectElement).value;
@@ -158,6 +173,8 @@ document.getElementById('save-settings')!.onclick = () => {
     settings.codingModelId = (document.getElementById('coding-model-id') as HTMLInputElement).value;
     settings.apiKey = (document.getElementById('api-key') as HTMLInputElement).value;
     settings.thinking = (document.getElementById('thinking-checkbox') as HTMLInputElement).checked;
+    settings.generateImage = (document.getElementById('generate-image-checkbox') as HTMLInputElement).checked;
+    settings.imageModelId = (document.getElementById('image-model-id') as HTMLInputElement).value;
 
     parent.postMessage({ pluginMessage: { type: 'save-settings', settings } }, '*');
 
@@ -200,6 +217,78 @@ document.getElementById('stop-btn')!.onclick = () => {
     if (abortController) {
         abortController.abort();
     }
+};
+
+const processImages = async (html: string, settings: any, abortController: AbortController | null): Promise<string> => {
+    const t = translations[settings.language];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const imgs = Array.from(doc.querySelectorAll('img'));
+
+    if (imgs.length === 0) return html;
+
+    for (let i = 0; i < imgs.length; i++) {
+        const img = imgs[i] as HTMLImageElement;
+        const src = img.getAttribute('src');
+        const alt = img.getAttribute('alt');
+        let resolvedBase64 = '';
+
+        document.getElementById('thinking-status')!.textContent = t.processingImage(i + 1, imgs.length);
+
+        // 1. Try to fetch external src
+        if (src && src.startsWith('http')) {
+            try {
+                const res = await fetch(src, { signal: abortController?.signal });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    if (blob.size > 0) {
+                        resolvedBase64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.readAsDataURL(blob);
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch image src:', e);
+            }
+        }
+
+        // 2. Try to generate via alt if no src or fetch failed
+        if (!resolvedBase64 && alt && settings.generateImage && !alt.startsWith('http')) {
+            try {
+                const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+                    method: 'POST',
+                    signal: abortController?.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${settings.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: settings.imageModelId,
+                        prompt: alt,
+                        response_format: 'b64_json'
+                    })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const b64 = data.data?.[0]?.b64_json;
+                    if (b64) {
+                        resolvedBase64 = `data:image/png;base64,${b64}`;
+                    }
+                }
+            } catch (e) {
+                console.error('AI image generation failed:', e);
+            }
+        }
+
+        if (resolvedBase64) {
+            img.setAttribute('src', resolvedBase64);
+        }
+    }
+
+    return doc.body.innerHTML;
 };
 
 const handleStream = async (response: Response, onText: (text: string, reasoning: string) => void) => {
@@ -270,11 +359,15 @@ document.getElementById('expand-btn')!.onclick = async () => {
             });
         });
 
-        const styleInstruction = styleRefs.length > 0
-            ? "[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated requirement, but follow the text instructions for content and structure.]\n\n"
+        const styleInstruction = styleRefs.filter(ref => !ref.loading && ref.imageData).length > 0
+            ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Keep the summary concise.]\n\n`
             : "";
 
-        messageContent.push({ type: 'text', text: styleInstruction + prompt });
+        const imageInstruction = settings.generateImage
+            ? "Note: The user intends to generate images. Ensure the expanded prompt includes highly detailed visual descriptions suitable for image generation prompts, including specifications about how the images should blend with the overall design style (colors, lighting, and layout).\n\n"
+            : "Note: Do NOT include any image generation prompts or mention images in the expanded description, as image generation is disabled.\n\n";
+
+        messageContent.push({ type: 'text', text: styleInstruction + imageInstruction + prompt });
 
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
@@ -286,11 +379,11 @@ document.getElementById('expand-btn')!.onclick = async () => {
             body: JSON.stringify({
                 model: settings.chatModelId,
                 stream: true,
-                thinking: (document.getElementById('thinking-checkbox') as HTMLInputElement).checked ? undefined : { type: 'disabled' },
+                thinking: settings.thinking ? undefined : { type: 'disabled' },
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an expert product manager and UX designer. TASK: Expand the user's short description into a detailed requirement document for a web page design in Figma. Focus on: 1. UI components (e.g., sections, buttons, input fields, text blocks). 2. One or two sentences about the task the user is going to accomplish. IMPORTANT: Do NOT include detailed colors, typography specs, or style descriptions (e.g., "blue gradient", "rounded corners"). Return ONLY the expanded description text, no intro/outro. OUTPUT LANGUAGE: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}`
+                        content: `You are a creative UI prompt engineer. Expand the user's brief UI description into a detailed, descriptive prompt for an AI UI generator. Focus on layout, style, color schemes, and visual elements. Keep the response as a single, well-structured paragraph.`
                     },
                     { role: 'user', content: messageContent }
                 ]
@@ -365,11 +458,15 @@ document.getElementById('build-btn')!.onclick = async () => {
             });
         });
 
-        const styleInstruction = styleRefs.length > 0
+        const styleInstruction = styleRefs.filter(ref => !ref.loading && ref.imageData).length > 0
             ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated design, but follow the text instructions for content and structure. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}.]\n\n`
             : "";
 
         messageContent.push({ type: 'text', text: styleInstruction + prompt });
+
+        const imageSystemRule = settings.generateImage
+            ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Include specific details about the scene, subject, lighting, and how the image should blend perfectly with the rest of the design's colors and aesthetic. Do NOT specify any 'src' attribute for images."
+            : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
 
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
@@ -381,11 +478,11 @@ document.getElementById('build-btn')!.onclick = async () => {
             body: JSON.stringify({
                 model: settings.codingModelId,
                 stream: true,
-                thinking: (document.getElementById('thinking-checkbox') as HTMLInputElement).checked ? undefined : { type: 'disabled' },
+                thinking: settings.thinking ? undefined : { type: 'disabled' },
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. Use Grid ONLY as a last resort for extremely complex 2D structures.`
+                        content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. ${imageSystemRule}`
                     },
                     { role: 'user', content: messageContent }
                 ]
@@ -408,6 +505,9 @@ document.getElementById('build-btn')!.onclick = async () => {
 
         let html = fullHtml.trim();
         html = html.replace(/^```html\n?/, '').replace(/\n?```$/, '');
+
+        // Resolve images (Fetch or Generate)
+        html = await processImages(html, settings, abortController);
 
         document.getElementById('thinking-status')!.textContent = t.buildingLayers;
         const iconMap = await getIconsMap(html);
@@ -441,16 +541,30 @@ document.getElementById('figma-to-tailwind-btn')!.onclick = () => {
    TAILWIND CONVERTER HANDLERS
    ============================================================================ */
 document.getElementById('convert')!.onclick = async () => {
-    const html = (document.getElementById('html-input') as HTMLTextAreaElement).value;
+    let html = (document.getElementById('html-input') as HTMLTextAreaElement).value;
     const viewport = (document.querySelector('input[name="viewport"]:checked') as HTMLInputElement).value;
-    const status = document.getElementById('tailwind-status')!;
+    const status = document.getElementById('status')!;
+    const thinkingContainer = document.getElementById('thinking-container')!;
     const t = translations[settings.language];
 
     if (!html) return;
-    status.textContent = t.processingIcons;
-    const iconMap = await getIconsMap(html);
 
-    parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
-    status.textContent = t.sentToFigma;
-    setTimeout(() => { status.textContent = ''; }, 2000);
+    thinkingContainer.classList.add('active');
+    status.style.display = 'none';
+
+    try {
+        // Resolve images (Fetch or Generate)
+        html = await processImages(html, settings, null);
+
+        const iconMap = await getIconsMap(html);
+        parent.postMessage({ pluginMessage: { type: 'convert-html', html, viewport, icons: iconMap } }, '*');
+        status.textContent = t.sentToFigma;
+        status.style.display = 'block';
+    } catch (e: any) {
+        status.textContent = `${t.errorPrefix}${e.message}`;
+        status.style.display = 'block';
+    } finally {
+        thinkingContainer.classList.remove('active');
+        setTimeout(() => { if (status.textContent === t.sentToFigma) status.textContent = ''; status.style.display = 'none'; }, 2000);
+    }
 };

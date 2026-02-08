@@ -228,6 +228,47 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
         }
     }
 
+    // Image handling
+    if (element.tagName === 'img') {
+        const src = element.attributes['src'];
+        const alt = element.attributes['alt'] || 'Image';
+        const rect = figma.createRectangle();
+        rect.name = `img: ${alt}`;
+
+        const rectStyles = Object.assign({}, inheritedStyles, styles);
+        if (rectStyles.borderRadius !== undefined) rect.cornerRadius = rectStyles.borderRadius;
+        if (rectStyles.borderWidth) {
+            rect.strokeWeight = rectStyles.borderWidth;
+            rect.strokes = [{ type: 'SOLID', color: rectStyles.borderColor || { r: 0.8, g: 0.8, b: 0.8 } }];
+        }
+
+        if (src && src.startsWith('data:image')) {
+            try {
+                const base64Data = src.split(',')[1];
+                const bytes = figma.base64Decode(base64Data);
+                const image = figma.createImage(bytes);
+                rect.fills = [{
+                    type: 'IMAGE',
+                    imageHash: image.hash,
+                    scaleMode: styles.objectFit === 'contain' ? 'FIT' : 'FILL'
+                }];
+            } catch (e) {
+                console.error('Failed to render image:', e);
+                rect.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
+            }
+        } else {
+            rect.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
+            // Add a small text label if it's a placeholder
+            // But for brevity, let's just use a icon-like placeholder
+        }
+
+        const w = (typeof styles.width === 'number') ? styles.width : (styles.width === 'FILL' ? availableWidth : 100);
+        const h = (typeof styles.height === 'number') ? styles.height : 100;
+        rect.resize(w || 100, h || 100);
+
+        return { node: rect, styles: rectStyles };
+    }
+
     // Text handling
     if (element.tagName === '#text') {
         const text = figma.createText();

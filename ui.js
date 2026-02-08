@@ -45,8 +45,10 @@
     document.getElementById("stop-btn").textContent = t.stopBtn;
     document.getElementById("thinking-status").textContent = t.aiThinking;
     document.getElementById("token-counter").textContent = `0 ${t.tokens}`;
-    const thinkingLabelSpan = document.querySelector("label.checkbox-group span");
-    if (thinkingLabelSpan) thinkingLabelSpan.textContent = t.thinkingLabel;
+    const thinkingLabel = document.getElementById("thinking-label");
+    if (thinkingLabel) thinkingLabel.textContent = t.thinkingLabel;
+    const generateImageLabel = document.getElementById("generate-image-label");
+    if (generateImageLabel) generateImageLabel.textContent = t.generateImage;
     const addRefBtn = document.getElementById("add-ref-btn");
     if (addRefBtn) {
       addRefBtn.childNodes[2].textContent = t.refStyle;
@@ -64,6 +66,8 @@
     document.querySelector('label[data-i18n="provider"]').textContent = t.provider;
     document.querySelector('label[data-i18n="chatModelId"]').textContent = t.chatModelId;
     document.querySelector('label[data-i18n="codingModelId"]').textContent = t.codingModelId;
+    const imageModelIdLabel = document.getElementById("image-model-id-label");
+    if (imageModelIdLabel) imageModelIdLabel.textContent = t.imageModelId;
     document.querySelector('label[data-i18n="apiKey"]').textContent = t.apiKey;
     document.getElementById("save-settings").textContent = t.saveSettings;
   }
@@ -119,7 +123,10 @@
           refStyle: "\u53C2\u8003\u6837\u5F0F",
           uploadingImage: "\u6B63\u5728\u4E0A\u4F20\u56FE\u7247...",
           noFrameSelected: "\u8BF7\u5148\u9009\u4E2D\u4E00\u4E2A\u56FE\u5C42 (Frame)",
-          refAdded: "\u5DF2\u6DFB\u52A0\u53C2\u8003"
+          refAdded: "\u5DF2\u6DFB\u52A0\u53C2\u8003",
+          generateImage: "\u751F\u6210\u56FE\u7247",
+          imageModelId: "\u56FE\u7247\u6A21\u578B Endpoint ID",
+          processingImage: (n, total) => `\u6B63\u5728\u5904\u7406\u56FE\u7247 ${n}/${total}...`
         },
         "en-US": {
           builderTab: "Builder",
@@ -168,7 +175,10 @@
           refStyle: "Ref Style",
           uploadingImage: "Uploading image...",
           noFrameSelected: "Please select a frame",
-          refAdded: "Reference added"
+          refAdded: "Reference added",
+          generateImage: "Gen Image",
+          imageModelId: "Image Model Endpoint ID",
+          processingImage: (n, total) => `Processing image ${n}/${total}...`
         }
       };
     }
@@ -253,7 +263,9 @@
         codingModelId: "doubao-seed-code-preview-251028",
         apiKey: "",
         language: "zh-CN",
-        thinking: true
+        thinking: true,
+        generateImage: false,
+        imageModelId: "doubao-seedream-4-5-251128"
       };
       var styleRefs = [];
       var abortController = null;
@@ -295,6 +307,9 @@
           document.getElementById("api-key").value = settings.apiKey || "";
           const thinkingCheckbox = document.getElementById("thinking-checkbox");
           if (thinkingCheckbox) thinkingCheckbox.checked = settings.thinking !== false;
+          const generateImageCheckbox = document.getElementById("generate-image-checkbox");
+          if (generateImageCheckbox) generateImageCheckbox.checked = settings.generateImage === true;
+          document.getElementById("image-model-id").value = settings.imageModelId || "doubao-seedream-4-5-251128";
           updateUI(settings);
         } else if (msg.type === "export-frame-result") {
           const t = translations[settings.language];
@@ -359,6 +374,12 @@
         settings.language = e.target.value;
         updateUI(settings);
       };
+      document.getElementById("thinking-checkbox").onchange = (e) => {
+        settings.thinking = e.target.checked;
+      };
+      document.getElementById("generate-image-checkbox").onchange = (e) => {
+        settings.generateImage = e.target.checked;
+      };
       document.getElementById("save-settings").onclick = () => {
         settings.language = document.getElementById("language").value;
         settings.provider = document.getElementById("provider").value;
@@ -366,6 +387,8 @@
         settings.codingModelId = document.getElementById("coding-model-id").value;
         settings.apiKey = document.getElementById("api-key").value;
         settings.thinking = document.getElementById("thinking-checkbox").checked;
+        settings.generateImage = document.getElementById("generate-image-checkbox").checked;
+        settings.imageModelId = document.getElementById("image-model-id").value;
         parent.postMessage({ pluginMessage: { type: "save-settings", settings } }, "*");
         const t = translations[settings.language];
         const status = document.getElementById("settings-status");
@@ -400,6 +423,68 @@
           abortController.abort();
         }
       };
+      var processImages = (html, settings2, abortController2) => __async(null, null, function* () {
+        var _a, _b;
+        const t = translations[settings2.language];
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const imgs = Array.from(doc.querySelectorAll("img"));
+        if (imgs.length === 0) return html;
+        for (let i = 0; i < imgs.length; i++) {
+          const img = imgs[i];
+          const src = img.getAttribute("src");
+          const alt = img.getAttribute("alt");
+          let resolvedBase64 = "";
+          document.getElementById("thinking-status").textContent = t.processingImage(i + 1, imgs.length);
+          if (src && src.startsWith("http")) {
+            try {
+              const res = yield fetch(src, { signal: abortController2 == null ? void 0 : abortController2.signal });
+              if (res.ok) {
+                const blob = yield res.blob();
+                if (blob.size > 0) {
+                  resolvedBase64 = yield new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                  });
+                }
+              }
+            } catch (e) {
+              console.error("Failed to fetch image src:", e);
+            }
+          }
+          if (!resolvedBase64 && alt && settings2.generateImage && !alt.startsWith("http")) {
+            try {
+              const res = yield fetch("https://ark.cn-beijing.volces.com/api/v3/images/generations", {
+                method: "POST",
+                signal: abortController2 == null ? void 0 : abortController2.signal,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${settings2.apiKey}`
+                },
+                body: JSON.stringify({
+                  model: settings2.imageModelId,
+                  prompt: alt,
+                  response_format: "b64_json"
+                })
+              });
+              if (res.ok) {
+                const data = yield res.json();
+                const b64 = (_b = (_a = data.data) == null ? void 0 : _a[0]) == null ? void 0 : _b.b64_json;
+                if (b64) {
+                  resolvedBase64 = `data:image/png;base64,${b64}`;
+                }
+              }
+            } catch (e) {
+              console.error("AI image generation failed:", e);
+            }
+          }
+          if (resolvedBase64) {
+            img.setAttribute("src", resolvedBase64);
+          }
+        }
+        return doc.body.innerHTML;
+      });
       var handleStream = (response, onText) => __async(null, null, function* () {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -464,8 +549,11 @@
               image_url: { url: `data:image/png;base64,${ref.imageData}` }
             });
           });
-          const styleInstruction = styleRefs.length > 0 ? "[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated requirement, but follow the text instructions for content and structure.]\n\n" : "";
-          messageContent.push({ type: "text", text: styleInstruction + prompt });
+          const styleInstruction = styleRefs.filter((ref) => !ref.loading && ref.imageData).length > 0 ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Keep the summary concise.]
+
+` : "";
+          const imageInstruction = settings.generateImage ? "Note: The user intends to generate images. Ensure the expanded prompt includes highly detailed visual descriptions suitable for image generation prompts, including specifications about how the images should blend with the overall design style (colors, lighting, and layout).\n\n" : "Note: Do NOT include any image generation prompts or mention images in the expanded description, as image generation is disabled.\n\n";
+          messageContent.push({ type: "text", text: styleInstruction + imageInstruction + prompt });
           const response = yield fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
             method: "POST",
             signal: abortController.signal,
@@ -476,11 +564,11 @@
             body: JSON.stringify({
               model: settings.chatModelId,
               stream: true,
-              thinking: document.getElementById("thinking-checkbox").checked ? void 0 : { type: "disabled" },
+              thinking: settings.thinking ? void 0 : { type: "disabled" },
               messages: [
                 {
                   role: "system",
-                  content: `You are an expert product manager and UX designer. TASK: Expand the user's short description into a detailed requirement document for a web page design in Figma. Focus on: 1. UI components (e.g., sections, buttons, input fields, text blocks). 2. One or two sentences about the task the user is going to accomplish. IMPORTANT: Do NOT include detailed colors, typography specs, or style descriptions (e.g., "blue gradient", "rounded corners"). Return ONLY the expanded description text, no intro/outro. OUTPUT LANGUAGE: ${settings.language === "zh-CN" ? "Chinese (Simplified)" : "English"}`
+                  content: `You are a creative UI prompt engineer. Expand the user's brief UI description into a detailed, descriptive prompt for an AI UI generator. Focus on layout, style, color schemes, and visual elements. Keep the response as a single, well-structured paragraph.`
                 },
                 { role: "user", content: messageContent }
               ]
@@ -549,10 +637,11 @@
               image_url: { url: `data:image/png;base64,${ref.imageData}` }
             });
           });
-          const styleInstruction = styleRefs.length > 0 ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated design, but follow the text instructions for content and structure. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}.]
+          const styleInstruction = styleRefs.filter((ref) => !ref.loading && ref.imageData).length > 0 ? `[Style Reference: Study the visual style, colors, typography, and layout patterns from the attached image(s). Apply similar aesthetics to the generated design, but follow the text instructions for content and structure. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}.]
 
 ` : "";
           messageContent.push({ type: "text", text: styleInstruction + prompt });
+          const imageSystemRule = settings.generateImage ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Include specific details about the scene, subject, lighting, and how the image should blend perfectly with the rest of the design's colors and aesthetic. Do NOT specify any 'src' attribute for images." : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
           const response = yield fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
             method: "POST",
             signal: abortController.signal,
@@ -563,11 +652,11 @@
             body: JSON.stringify({
               model: settings.codingModelId,
               stream: true,
-              thinking: document.getElementById("thinking-checkbox").checked ? void 0 : { type: "disabled" },
+              thinking: settings.thinking ? void 0 : { type: "disabled" },
               messages: [
                 {
                   role: "system",
-                  content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === "zh-CN" ? "Chinese (Simplified)" : "English"}. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. Use Grid ONLY as a last resort for extremely complex 2D structures.`
+                  content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === "zh-CN" ? "Chinese (Simplified)" : "English"}. Ensure all text in the generated HTML is in ${settings.language === "zh-CN" ? "Chinese" : "English"}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. ${imageSystemRule}`
                 },
                 { role: "user", content: messageContent }
               ]
@@ -586,6 +675,7 @@
           });
           let html = fullHtml.trim();
           html = html.replace(/^```html\n?/, "").replace(/\n?```$/, "");
+          html = yield processImages(html, settings, abortController);
           document.getElementById("thinking-status").textContent = t.buildingLayers;
           const iconMap = yield getIconsMap(html);
           status.textContent = t.buildingLayers;
@@ -611,18 +701,30 @@
         parent.postMessage({ pluginMessage: { type: "figma-to-tailwind" } }, "*");
       };
       document.getElementById("convert").onclick = () => __async(null, null, function* () {
-        const html = document.getElementById("html-input").value;
+        let html = document.getElementById("html-input").value;
         const viewport = document.querySelector('input[name="viewport"]:checked').value;
-        const status = document.getElementById("tailwind-status");
+        const status = document.getElementById("status");
+        const thinkingContainer = document.getElementById("thinking-container");
         const t = translations[settings.language];
         if (!html) return;
-        status.textContent = t.processingIcons;
-        const iconMap = yield getIconsMap(html);
-        parent.postMessage({ pluginMessage: { type: "convert-html", html, viewport, icons: iconMap } }, "*");
-        status.textContent = t.sentToFigma;
-        setTimeout(() => {
-          status.textContent = "";
-        }, 2e3);
+        thinkingContainer.classList.add("active");
+        status.style.display = "none";
+        try {
+          html = yield processImages(html, settings, null);
+          const iconMap = yield getIconsMap(html);
+          parent.postMessage({ pluginMessage: { type: "convert-html", html, viewport, icons: iconMap } }, "*");
+          status.textContent = t.sentToFigma;
+          status.style.display = "block";
+        } catch (e) {
+          status.textContent = `${t.errorPrefix}${e.message}`;
+          status.style.display = "block";
+        } finally {
+          thinkingContainer.classList.remove("active");
+          setTimeout(() => {
+            if (status.textContent === t.sentToFigma) status.textContent = "";
+            status.style.display = "none";
+          }, 2e3);
+        }
       });
     }
   });

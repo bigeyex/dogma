@@ -46,7 +46,10 @@ export const translations: Record<string, any> = {
         refStyle: '参考样式',
         uploadingImage: '正在上传图片...',
         noFrameSelected: '请先选中一个图层 (Frame)',
-        refAdded: '已添加参考'
+        refAdded: '已添加参考',
+        generateImage: '生成图片',
+        imageModelId: '图片模型 Endpoint ID',
+        processingImage: (n: number, total: number) => `正在处理图片 ${n}/${total}...`,
     },
     'en-US': {
         builderTab: 'Builder',
@@ -95,8 +98,11 @@ export const translations: Record<string, any> = {
         refStyle: 'Ref Style',
         uploadingImage: 'Uploading image...',
         noFrameSelected: 'Please select a frame',
-        refAdded: 'Reference added'
-    }
+        refAdded: 'Reference added',
+        generateImage: 'Gen Image',
+        imageModelId: 'Image Model Endpoint ID',
+        processingImage: (n: number, total: number) => `Processing image ${n}/${total}...`,
+    },
 };
 
 export function updateUI(settings: any) {
@@ -119,8 +125,10 @@ export function updateUI(settings: any) {
     document.getElementById('stop-btn')!.textContent = t.stopBtn;
     document.getElementById('thinking-status')!.textContent = t.aiThinking;
     document.getElementById('token-counter')!.textContent = `0 ${t.tokens}`;
-    const thinkingLabelSpan = document.querySelector('label.checkbox-group span');
-    if (thinkingLabelSpan) thinkingLabelSpan.textContent = t.thinkingLabel;
+    const thinkingLabel = document.getElementById('thinking-label');
+    if (thinkingLabel) thinkingLabel.textContent = t.thinkingLabel;
+    const generateImageLabel = document.getElementById('generate-image-label');
+    if (generateImageLabel) generateImageLabel.textContent = t.generateImage;
 
     // Style Ref
     const addRefBtn = document.getElementById('add-ref-btn');
@@ -144,6 +152,8 @@ export function updateUI(settings: any) {
     document.querySelector('label[data-i18n="provider"]')!.textContent = t.provider;
     document.querySelector('label[data-i18n="chatModelId"]')!.textContent = t.chatModelId;
     document.querySelector('label[data-i18n="codingModelId"]')!.textContent = t.codingModelId;
+    const imageModelIdLabel = document.getElementById('image-model-id-label');
+    if (imageModelIdLabel) imageModelIdLabel.textContent = t.imageModelId;
     document.querySelector('label[data-i18n="apiKey"]')!.textContent = t.apiKey;
     document.getElementById('save-settings')!.textContent = t.saveSettings;
 }

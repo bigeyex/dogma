@@ -44,10 +44,16 @@
         <label for="builder-desktop">🖥️ Desktop</label>
       </div>
 
-      <label class="checkbox-group">
-        <input type="checkbox" id="thinking-checkbox" checked>
-        <span data-i18n="thinkingLabel">Thinking(深度思考)</span>
-      </label>
+      <div class="checkbox-group">
+        <div class="setting-item checkbox-item">
+          <input type="checkbox" id="thinking-checkbox" checked>
+          <label id="thinking-label" for="thinking-checkbox">Deep Thinking</label>
+        </div>
+        <div class="setting-item checkbox-item">
+          <input type="checkbox" id="generate-image-checkbox">
+          <label id="generate-image-label" for="generate-image-checkbox">Generate Image</label>
+        </div>
+      </div>
 
       <div id="copy-btn" title="Copy generated code"
         style="display: none; margin-left: auto; cursor: pointer; color: #888; align-items: center; transition: color 0.2s;">
@@ -133,6 +139,11 @@
       <label data-i18n="codingModelId">Coding Model ID (for Builder)</label>
       <input type="text" id="coding-model-id" placeholder="doubao-seed-code-preview-251028"
         value="doubao-seed-code-preview-251028">
+    </div>
+
+    <div class="form-group">
+      <label id="image-model-id-label" for="image-model-id">Image Model Endpoint ID</label>
+      <input type="text" id="image-model-id" placeholder="e.g. doubao-seedream-4-5-251128">
     </div>
 
     <div class="form-group">
