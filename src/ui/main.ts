@@ -547,7 +547,7 @@ document.getElementById('figma-to-tailwind-btn')!.onclick = () => {
 document.getElementById('convert')!.onclick = async () => {
     let html = (document.getElementById('html-input') as HTMLTextAreaElement).value;
     const viewport = (document.querySelector('input[name="viewport"]:checked') as HTMLInputElement).value;
-    const status = document.getElementById('status')!;
+    const status = document.getElementById('tailwind-status')!;
     const thinkingContainer = document.getElementById('thinking-container')!;
     const t = translations[settings.language];
 

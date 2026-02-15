@@ -686,7 +686,7 @@
   document.getElementById("convert").onclick = () => __async(null, null, function* () {
     let html = document.getElementById("html-input").value;
     const viewport = document.querySelector('input[name="viewport"]:checked').value;
-    const status = document.getElementById("status");
+    const status = document.getElementById("tailwind-status");
     const thinkingContainer = document.getElementById("thinking-container");
     const t = translations[settings.language];
     if (!html) return;
