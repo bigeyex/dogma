@@ -104,8 +104,10 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
             if (!styles.flexDirection) styles.flexDirection = 'HORIZONTAL';
         } else if (cls === 'flex-row') {
             styles.flexDirection = 'HORIZONTAL';
+            if (!styles.display) styles.display = 'flex';
         } else if (cls === 'flex-col') {
             styles.flexDirection = 'VERTICAL';
+            if (!styles.display) styles.display = 'flex';
         } else if (cls === 'flex-wrap') {
             styles.flexWrap = 'WRAP';
         } else if (cls === 'flex-nowrap') {

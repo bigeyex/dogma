@@ -299,7 +299,7 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     frame.fills = [];
 
     // Flex direction: default to horizontal (row) per CSS flexbox spec
-    if (styles.display === 'flex' || styles.display === 'grid') {
+    if (styles.display === 'flex' || styles.display === 'grid' || styles.flexDirection) {
         frame.layoutMode = styles.flexDirection || 'HORIZONTAL';
     } else {
         // Detect if all children are inline-level tags. If so, default to HORIZONTAL.

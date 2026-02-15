@@ -368,7 +368,7 @@ document.getElementById('expand-btn')!.onclick = async () => {
             : "";
 
         const imageInstruction = settings.generateImage
-            ? "Note: The user intends to generate images. Ensure the expanded prompt includes highly detailed visual descriptions suitable for image generation prompts, including specifications about how the images should blend with the overall design style (colors, lighting, and layout).\n\n"
+            ? "Note: The user intends to generate images. Ensure the expanded prompt includes highly detailed visual descriptions suitable for image generation prompts, including specifications about how the images should blend with the overall design style (colors, lighting, and layout). IMPORTANT: Generate visual materials only, avoid generating charts, structure diagrams, schematics, or any content with text.\n\n"
             : "Note: Do NOT include any image generation prompts or mention images in the expanded description, as image generation is disabled.\n\n";
 
         messageContent.push({ type: 'text', text: styleInstruction + imageInstruction + prompt });
@@ -469,7 +469,7 @@ document.getElementById('build-btn')!.onclick = async () => {
         messageContent.push({ type: 'text', text: styleInstruction + prompt });
 
         const imageSystemRule = settings.generateImage
-            ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Include specific details about the scene, subject, lighting, and how the image should blend perfectly with the rest of the design's colors and aesthetic. Do NOT specify any 'src' attribute for images."
+            ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Include specific details about the scene, subject, lighting, and how the image should blend perfectly with the rest of the design's colors and aesthetic. IMPORTANT: Generate visual materials only, avoid generating charts, structure diagrams, schematics, or any content with text. Do NOT specify any 'src' attribute for images."
             : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
 
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
