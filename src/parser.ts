@@ -1,5 +1,5 @@
 import { ParsedElement, ResolvedStyles } from './types';
-import { TAILWIND_COLORS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from './constants';
+import { TAILWIND_COLORS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS, MAX_WIDTHS } from './constants';
 import { hexToRgb, parseSpacing, sortClasses } from './utils';
 
 export function parseColor(colorClass: string, customColors: Record<string, string>): RGB | null {
@@ -180,8 +180,13 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
             if (val !== undefined) styles.minWidth = val;
         }
         else if (cls.startsWith('max-w-')) {
-            const val = parseSpacing(cls.slice(6));
-            if (val !== undefined) styles.maxWidth = val;
+            const value = cls.slice(6);
+            if (MAX_WIDTHS[value] !== undefined) {
+                styles.maxWidth = MAX_WIDTHS[value];
+            } else {
+                const val = parseSpacing(value);
+                if (val !== undefined) styles.maxWidth = val;
+            }
         }
         else if (cls.startsWith('min-h-')) {
             const val = parseSpacing(cls.slice(6));
@@ -321,11 +326,19 @@ export function resolveClasses(classes: string[], customColors: Record<string, s
             if (!isNaN(val)) styles.opacity = val / 100;
         }
         else if (cls === 'grid') {
-            styles.display = 'grid'; styles.flexWrap = 'WRAP';
+            styles.display = 'grid';
+            styles.flexWrap = 'WRAP';
+            if (!styles.width) styles.width = 'FILL';
         }
         else if (cls.startsWith('grid-cols-')) {
             const cols = parseInt(cls.slice(10));
-            if (!isNaN(cols)) styles.gridCols = cols;
+            if (!isNaN(cols)) {
+                styles.gridCols = cols;
+                if (!styles.display) {
+                    styles.display = 'grid';
+                    styles.flexWrap = 'WRAP';
+                }
+            }
         }
         else if (cls === 'justify-around') styles.justifyContent = 'SPACE_BETWEEN';
         else if (cls === 'flex-shrink-0') styles.flexShrink = 0;

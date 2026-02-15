@@ -119,11 +119,11 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
                     artboard.appendChild(result.node);
                     nodes.push(result.node);
                     if (result.styles.position === 'ABSOLUTE') {
-                        applySizingConstraints(result.node, result.styles, artboard.layoutMode);
+                        applySizingConstraints(result.node, result.styles, artboard.layoutMode, bodyStyles.display || 'flex');
                         applyLayoutConstraints(result.node, result.styles, artboard.layoutMode);
                         applyAbsolutePositioning(result.node, result.styles, artboard);
                     } else {
-                        applySizingConstraints(result.node, result.styles, artboard.layoutMode);
+                        applySizingConstraints(result.node, result.styles, artboard.layoutMode, bodyStyles.display || 'flex');
                         applyLayoutConstraints(result.node, result.styles, artboard.layoutMode);
                     }
                 }

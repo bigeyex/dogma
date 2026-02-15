@@ -82,3 +82,10 @@ export const BREAKPOINTS: Record<string, number> = {
     xl: 1280,
     '2xl': 1536,
 };
+
+export const MAX_WIDTHS: Record<string, number> = {
+    'xs': 320, 'sm': 384, 'md': 448, 'lg': 512, 'xl': 576,
+    '2xl': 672, '3xl': 768, '4xl': 896, '5xl': 1024, '6xl': 1152, '7xl': 1280,
+    'prose': 1040, 'screen-sm': 640, 'screen-md': 768, 'screen-lg': 1024,
+    'screen-xl': 1280, 'screen-2xl': 1536
+};

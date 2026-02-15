@@ -3,7 +3,7 @@ import { resolveClasses } from './parser';
 
 const INLINE_TAGS = new Set(['span', 'i', 'b', 'strong', 'em', 'a', 'img', 'u', 'code', 'mark', 'small', 'sub', 'sup', 'label', '#text']);
 
-export function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, parentLayoutMode: string) {
+export function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, parentLayoutMode: string, parentDisplay?: string) {
     if (node.type === 'FRAME' || node.type === 'TEXT') {
         if (styles.width === 'FILL') {
             if (parentLayoutMode !== 'NONE') node.layoutSizingHorizontal = 'FILL';
@@ -17,7 +17,15 @@ export function applySizingConstraints(node: SceneNode, styles: ResolvedStyles, 
         } else {
             if (node.type === 'FRAME') {
                 if (styles.position === 'ABSOLUTE') node.layoutSizingHorizontal = 'HUG';
-                else if (parentLayoutMode === 'VERTICAL') node.layoutSizingHorizontal = 'FILL';
+                else if (parentLayoutMode === 'VERTICAL') {
+                    if (parentDisplay === 'flex' || parentDisplay === 'grid' ||
+                        styles.display === 'flex' || styles.display === 'grid' ||
+                        styles.maxWidth !== undefined) {
+                        node.layoutSizingHorizontal = 'FILL';
+                    } else {
+                        node.layoutSizingHorizontal = 'HUG';
+                    }
+                }
                 else if (parentLayoutMode === 'HORIZONTAL') node.layoutSizingHorizontal = styles.flexGrow === 1 ? 'FILL' : 'HUG';
             } else if (node.type === 'TEXT') node.textAutoResize = 'WIDTH_AND_HEIGHT';
         }
@@ -339,7 +347,7 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
         frame.appendChild(placeholderText);
     }
 
-    let resolvedWidth: number | undefined = (typeof styles.width === 'number') ? styles.width : (styles.width === 'FILL' ? availableWidth : undefined);
+    let resolvedWidth: number | undefined = (typeof styles.width === 'number') ? styles.width : (styles.width === 'FILL' || styles.display === 'grid' ? availableWidth : undefined);
     let innerWidth = resolvedWidth;
     if (innerWidth !== undefined) {
         innerWidth = innerWidth - (styles.paddingLeft || 0) - (styles.paddingRight || 0) - ((styles.borderWidth || 0) * 2);
@@ -360,7 +368,7 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
             if (childResult.styles.position === 'ABSOLUTE') absoluteChildren.push(childResult);
             else {
                 frame.appendChild(childResult.node);
-                applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode);
+                applySizingConstraints(childResult.node, childResult.styles, frame.layoutMode, styles.display);
                 applyLayoutConstraints(childResult.node, childResult.styles, frame.layoutMode);
             }
         }
@@ -403,7 +411,7 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     if (absoluteChildren.length > 0) {
         for (const absChild of absoluteChildren) {
             frame.appendChild(absChild.node);
-            applySizingConstraints(absChild.node, absChild.styles, frame.layoutMode);
+            applySizingConstraints(absChild.node, absChild.styles, frame.layoutMode, styles.display);
             applyLayoutConstraints(absChild.node, absChild.styles, frame.layoutMode);
             applyAbsolutePositioning(absChild.node, absChild.styles, frame);
         }
