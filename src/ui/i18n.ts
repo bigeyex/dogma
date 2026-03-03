@@ -10,6 +10,10 @@ export const translations: Record<string, any> = {
         desktop: '🖥️ 桌面',
         buildBtn: '生成设计',
         expandBtn: '展开描述',
+        editInPlace: '就地编辑',
+        editInPlaceWorking: '正在就地编辑...',
+        editInPlaceComplete: '✓ 就地编辑完成！',
+        noArtboardFound: '请在画板中选择一个元素',
         stopBtn: '停止',
         tailwindTitle: 'Tailwind → Figma',
         tailwindDesc: '粘贴豆包应用生成的代码，转换为Figma设计稿。',
@@ -50,6 +54,8 @@ export const translations: Record<string, any> = {
         generateImage: '生成图片',
         imageModelId: '图片模型 Endpoint ID',
         processingImage: (n: number, total: number) => `正在处理图片 ${n}/${total}...`,
+        exportingArtboard: '正在导出画板...',
+        replacingSelection: '正在替换选中内容...',
     },
     'en-US': {
         builderTab: 'Builder',
@@ -62,6 +68,10 @@ export const translations: Record<string, any> = {
         desktop: '🖥️ Desktop',
         buildBtn: 'Build in Figma',
         expandBtn: 'Expand',
+        editInPlace: 'Edit in Place',
+        editInPlaceWorking: 'Editing in place...',
+        editInPlaceComplete: '✓ Edit in place complete!',
+        noArtboardFound: 'Please select an element within an artboard',
         stopBtn: 'Stop',
         tailwindTitle: 'Tailwind → Figma',
         tailwindDesc: 'Convert existing Tailwind HTML to Figma layers.',
@@ -102,6 +112,8 @@ export const translations: Record<string, any> = {
         generateImage: 'Gen Image',
         imageModelId: 'Image Model Endpoint ID',
         processingImage: (n: number, total: number) => `Processing image ${n}/${total}...`,
+        exportingArtboard: 'Exporting artboard...',
+        replacingSelection: 'Replacing selection...',
     },
 };
 
@@ -121,7 +133,9 @@ export function updateUI(settings: any) {
     document.querySelector('label[for="builder-mobile"]')!.textContent = t.mobile;
     document.querySelector('label[for="builder-desktop"]')!.textContent = t.desktop;
     document.querySelector('#build-btn')!.childNodes[2].textContent = t.buildBtn; // Respect spinner
-    document.querySelector('#expand-btn')!.childNodes[2].textContent = t.expandBtn;
+    document.querySelector('#edit-in-place-btn')!.childNodes[2].textContent = t.editInPlace;
+    const expandIconBtn = document.getElementById('expand-icon-btn');
+    if (expandIconBtn) expandIconBtn.title = t.expandBtn;
     document.getElementById('stop-btn')!.textContent = t.stopBtn;
     document.getElementById('thinking-status')!.textContent = t.aiThinking;
     document.getElementById('token-counter')!.textContent = `0 ${t.tokens}`;

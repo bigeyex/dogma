@@ -121,6 +121,9 @@ window.onmessage = (event) => {
             });
         }
         updateRefList();
+    } else if (msg.type === 'artboard-with-selection-result') {
+        // Store the result for the edit-in-place handler to pick up
+        (window as any).__artboardSelectionResult = msg;
     } else {
         updateUI(settings);
     }
@@ -332,11 +335,12 @@ const handleStream = async (response: Response, onText: (text: string, reasoning
     return { fullText, reasoningText };
 };
 
-document.getElementById('expand-btn')!.onclick = async () => {
+document.getElementById('expand-icon-btn')!.onclick = async () => {
     const promptInput = document.getElementById('prompt-input') as HTMLTextAreaElement;
     const prompt = promptInput.value;
-    const btn = document.getElementById('expand-btn') as HTMLButtonElement;
+    const btn = document.getElementById('expand-icon-btn') as HTMLButtonElement;
     const buildBtn = document.getElementById('build-btn') as HTMLButtonElement;
+    const editInPlaceBtn = document.getElementById('edit-in-place-btn') as HTMLButtonElement;
     const status = document.getElementById('builder-status')!;
     const thinkingContainer = document.getElementById('thinking-container')!;
     const t = translations[settings.language];
@@ -345,8 +349,9 @@ document.getElementById('expand-btn')!.onclick = async () => {
     if (!settings.apiKey) { status.textContent = t.setApiKey; return; }
 
     btn.disabled = true;
-    buildBtn.disabled = true;
     btn.classList.add('loading');
+    buildBtn.disabled = true;
+    editInPlaceBtn.disabled = true;
     status.textContent = '';
     status.style.display = 'none';
     thinkingContainer.classList.add('active');
@@ -418,8 +423,9 @@ document.getElementById('expand-btn')!.onclick = async () => {
     } finally {
         status.style.display = 'block';
         btn.disabled = false;
-        buildBtn.disabled = false;
         btn.classList.remove('loading');
+        buildBtn.disabled = false;
+        editInPlaceBtn.disabled = false;
         thinkingContainer.classList.remove('active');
         if (lastGeneratedCode) copyBtn.style.display = 'flex';
         abortController = null;
@@ -430,7 +436,7 @@ document.getElementById('build-btn')!.onclick = async () => {
     const prompt = (document.getElementById('prompt-input') as HTMLTextAreaElement).value;
     const viewport = (document.querySelector('input[name="builder-viewport"]:checked') as HTMLInputElement).value;
     const btn = document.getElementById('build-btn') as HTMLButtonElement;
-    const expandBtn = document.getElementById('expand-btn') as HTMLButtonElement;
+    const editInPlaceBtn = document.getElementById('edit-in-place-btn') as HTMLButtonElement;
     const status = document.getElementById('builder-status')!;
     const thinkingContainer = document.getElementById('thinking-container')!;
     const t = translations[settings.language];
@@ -439,7 +445,7 @@ document.getElementById('build-btn')!.onclick = async () => {
     if (!settings.apiKey) { status.textContent = t.setApiKey; return; }
 
     btn.disabled = true;
-    expandBtn.disabled = true;
+    editInPlaceBtn.disabled = true;
     btn.classList.add('loading');
     status.textContent = '';
     status.style.display = 'none';
@@ -526,7 +532,154 @@ document.getElementById('build-btn')!.onclick = async () => {
     } finally {
         status.style.display = 'block';
         btn.disabled = false;
-        expandBtn.disabled = false;
+        editInPlaceBtn.disabled = false;
+        btn.classList.remove('loading');
+        thinkingContainer.classList.remove('active');
+        if (lastGeneratedCode) copyBtn.style.display = 'flex';
+        abortController = null;
+    }
+};
+
+document.getElementById('edit-in-place-btn')!.onclick = async () => {
+    const prompt = (document.getElementById('prompt-input') as HTMLTextAreaElement).value;
+    const viewport = (document.querySelector('input[name="builder-viewport"]:checked') as HTMLInputElement).value;
+    const btn = document.getElementById('edit-in-place-btn') as HTMLButtonElement;
+    const buildBtn = document.getElementById('build-btn') as HTMLButtonElement;
+    const status = document.getElementById('builder-status')!;
+    const thinkingContainer = document.getElementById('thinking-container')!;
+    const t = translations[settings.language];
+
+    if (!settings.apiKey) { status.textContent = t.setApiKey; status.style.display = 'block'; return; }
+
+    btn.disabled = true;
+    buildBtn.disabled = true;
+    btn.classList.add('loading');
+    status.textContent = '';
+    status.style.display = 'none';
+    copyBtn.style.display = 'none';
+    thinkingContainer.classList.add('active');
+    document.getElementById('thinking-status')!.textContent = t.exportingArtboard;
+
+    abortController = new AbortController();
+
+    try {
+        // Step 1: Request artboard screenshot with red border around selection
+        (window as any).__artboardSelectionResult = null;
+        parent.postMessage({ pluginMessage: { type: 'export-artboard-with-selection' } }, '*');
+
+        // Wait for the result from Figma
+        const artboardResult: any = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timeout waiting for artboard export')), 15000);
+            const checkInterval = setInterval(() => {
+                if (abortController?.signal.aborted) {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeout);
+                    reject(new Error('AbortError'));
+                    return;
+                }
+                const result = (window as any).__artboardSelectionResult;
+                if (result) {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeout);
+                    (window as any).__artboardSelectionResult = null;
+                    resolve(result);
+                }
+            }, 100);
+        });
+
+        if (artboardResult.error) {
+            throw new Error(artboardResult.error === 'no-selection' ? t.noArtboardFound : artboardResult.error);
+        }
+
+        document.getElementById('thinking-status')!.textContent = t.contactingAI;
+
+        // Step 2: Send to LLM with the artboard image and instructions
+        const messageContent: any[] = [
+            {
+                type: 'image_url',
+                image_url: { url: `data:image/png;base64,${artboardResult.imageData}` }
+            }
+        ];
+
+        const userInstruction = prompt
+            ? `The image shows a UI design with a region highlighted by a red border. Regenerate ONLY the content inside the red-bordered region based on the following instruction: ${prompt}\n\nKeep the same overall style, dimensions, and visual language as the surrounding design. Return only the HTML snippet for the red-bordered region, not the entire page.`
+            : `The image shows a UI design with a region highlighted by a red border. Regenerate ONLY the content inside the red-bordered region. Improve or refine it while keeping the same overall style, dimensions, and visual language as the surrounding design. Return only the HTML snippet for the red-bordered region, not the entire page.`;
+
+        messageContent.push({ type: 'text', text: userInstruction });
+
+        const selectionWidth = artboardResult.selectionBounds?.width || 375;
+        const isSelectionWide = selectionWidth > 500;
+        const viewportDesc = isSelectionWide
+            ? `Target region width: ${Math.round(selectionWidth)}px. Use appropriate layouts for this width.`
+            : `Target region width: ${Math.round(selectionWidth)}px. Use single-column or compact layouts.`;
+
+        const imageSystemRule = settings.generateImage
+            ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Do NOT specify any 'src' attribute for images."
+            : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
+
+        const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+            method: 'POST',
+            signal: abortController.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`
+            },
+            body: JSON.stringify({
+                model: settings.codingModelId || DEFAULT_CODING_MODEL,
+                stream: true,
+                thinking: settings.thinking ? undefined : { type: 'disabled' },
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are an elite UI engineer. TASK: Look at the provided UI design screenshot. There is a region highlighted with a RED BORDER. Generate a standalone HTML snippet using Tailwind CSS classes that replaces ONLY the content within that red-bordered region. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Match the existing visual style, colors, typography, and design language. 3. Use modern, premium aesthetics consistent with the surrounding design. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon). 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]). 9. AVOID using CSS Grid. Always prefer Flexbox. Explicitly specify flex direction using 'flex-row' or 'flex-col'. ${imageSystemRule}`
+                    },
+                    { role: 'user', content: messageContent }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error?.message || 'API request failed');
+        }
+
+        const { fullText: fullHtml } = await handleStream(response, (text, reasoning) => {
+            if (reasoning) document.getElementById('thinking-status')!.textContent = t.aiThinking;
+            else document.getElementById('thinking-status')!.textContent = t.generating;
+
+            const tokens = Math.floor((reasoning.length + text.length) / 4);
+            document.getElementById('token-counter')!.textContent = `${tokens} ${t.tokens}`;
+            lastGeneratedCode = text;
+        });
+
+        let html = fullHtml.trim();
+        html = html.replace(/^```html\n?/, '').replace(/\n?```$/, '');
+
+        // Resolve images
+        html = await processImages(html, settings, abortController);
+
+        document.getElementById('thinking-status')!.textContent = t.replacingSelection;
+        const iconMap = await getIconsMap(html);
+
+        // Step 3: Send replacement to Figma
+        parent.postMessage({
+            pluginMessage: {
+                type: 'replace-selection',
+                html,
+                viewport,
+                icons: iconMap,
+                selectionId: artboardResult.selectionId
+            }
+        }, '*');
+        status.textContent = t.editInPlaceComplete;
+
+    } catch (err: any) {
+        if (err.name === 'AbortError' || err.message === 'AbortError') status.textContent = t.generationStopped;
+        else status.textContent = `${t.errorPrefix}${err.message}`;
+    } finally {
+        status.style.display = 'block';
+        btn.disabled = false;
+        buildBtn.disabled = false;
         btn.classList.remove('loading');
         thinkingContainer.classList.remove('active');
         if (lastGeneratedCode) copyBtn.style.display = 'flex';
