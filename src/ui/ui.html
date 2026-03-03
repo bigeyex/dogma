@@ -34,13 +34,12 @@
       <div class="textarea-wrapper">
         <textarea id="prompt-input"
           placeholder="e.g. A premium landing page hero section with a dark theme, a vibrant call-to-action button, and a feature list."></textarea>
-        <button id="expand-icon-btn" class="expand-icon-btn" title="Expand description">
+        <button id="expand-icon-btn" class="expand-icon-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="19" cy="12" r="1"></circle>
+            <circle cx="5" cy="12" r="1"></circle>
           </svg>
         </button>
       </div>
@@ -65,15 +64,6 @@
           <label id="generate-image-label" for="generate-image-checkbox">Generate Image</label>
         </div>
       </div>
-
-      <div id="copy-btn" title="Copy generated code"
-        style="display: none; margin-left: auto; cursor: pointer; color: #888; align-items: center; transition: color 0.2s;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-      </div>
     </div>
 
     <div class="btn-group">
@@ -86,7 +76,17 @@
         Edit in Place
       </button>
     </div>
-    <div id="builder-status" class="status"></div>
+
+    <div class="status-line">
+      <span id="builder-status" class="status"></span>
+      <div id="copy-btn" title="Copy generated code">
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </div>
+    </div>
 
     <div id="thinking-container" class="thinking-container">
       <div id="thinking-status">AI is thinking...</div>

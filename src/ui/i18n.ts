@@ -9,7 +9,7 @@ export const translations: Record<string, any> = {
         mobile: '📱 手机',
         desktop: '🖥️ 桌面',
         buildBtn: '生成设计',
-        expandBtn: '展开描述',
+        expandBtn: '扩写提示词',
         editInPlace: '就地编辑',
         editInPlaceWorking: '正在就地编辑...',
         editInPlaceComplete: '✓ 就地编辑完成！',
@@ -67,7 +67,7 @@ export const translations: Record<string, any> = {
         mobile: '📱 Mobile',
         desktop: '🖥️ Desktop',
         buildBtn: 'Build in Figma',
-        expandBtn: 'Expand',
+        expandBtn: 'Expand Prompt',
         editInPlace: 'Edit in Place',
         editInPlaceWorking: 'Editing in place...',
         editInPlaceComplete: '✓ Edit in place complete!',
@@ -135,7 +135,10 @@ export function updateUI(settings: any) {
     document.querySelector('#build-btn')!.childNodes[2].textContent = t.buildBtn; // Respect spinner
     document.querySelector('#edit-in-place-btn')!.childNodes[2].textContent = t.editInPlace;
     const expandIconBtn = document.getElementById('expand-icon-btn');
-    if (expandIconBtn) expandIconBtn.title = t.expandBtn;
+    if (expandIconBtn) {
+        expandIconBtn.setAttribute('data-tooltip', t.expandBtn);
+        expandIconBtn.removeAttribute('title');
+    }
     document.getElementById('stop-btn')!.textContent = t.stopBtn;
     document.getElementById('thinking-status')!.textContent = t.aiThinking;
     document.getElementById('token-counter')!.textContent = `0 ${t.tokens}`;

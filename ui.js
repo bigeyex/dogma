@@ -33,7 +33,7 @@
       mobile: "\u{1F4F1} \u624B\u673A",
       desktop: "\u{1F5A5}\uFE0F \u684C\u9762",
       buildBtn: "\u751F\u6210\u8BBE\u8BA1",
-      expandBtn: "\u5C55\u5F00\u63CF\u8FF0",
+      expandBtn: "\u6269\u5199\u63D0\u793A\u8BCD",
       editInPlace: "\u5C31\u5730\u7F16\u8F91",
       editInPlaceWorking: "\u6B63\u5728\u5C31\u5730\u7F16\u8F91...",
       editInPlaceComplete: "\u2713 \u5C31\u5730\u7F16\u8F91\u5B8C\u6210\uFF01",
@@ -91,7 +91,7 @@
       mobile: "\u{1F4F1} Mobile",
       desktop: "\u{1F5A5}\uFE0F Desktop",
       buildBtn: "Build in Figma",
-      expandBtn: "Expand",
+      expandBtn: "Expand Prompt",
       editInPlace: "Edit in Place",
       editInPlaceWorking: "Editing in place...",
       editInPlaceComplete: "\u2713 Edit in place complete!",
@@ -154,7 +154,10 @@
     document.querySelector("#build-btn").childNodes[2].textContent = t.buildBtn;
     document.querySelector("#edit-in-place-btn").childNodes[2].textContent = t.editInPlace;
     const expandIconBtn = document.getElementById("expand-icon-btn");
-    if (expandIconBtn) expandIconBtn.title = t.expandBtn;
+    if (expandIconBtn) {
+      expandIconBtn.setAttribute("data-tooltip", t.expandBtn);
+      expandIconBtn.removeAttribute("title");
+    }
     document.getElementById("stop-btn").textContent = t.stopBtn;
     document.getElementById("thinking-status").textContent = t.aiThinking;
     document.getElementById("token-counter").textContent = `0 ${t.tokens}`;
@@ -406,7 +409,7 @@
     document.execCommand("Copy");
     textArea.remove();
     const originalHTML = copyBtn.innerHTML;
-    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
     setTimeout(() => {
       copyBtn.innerHTML = originalHTML;
     }, 2e3);
