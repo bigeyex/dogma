@@ -56,6 +56,10 @@ export const translations: Record<string, any> = {
         processingImage: (n: number, total: number) => `正在处理图片 ${n}/${total}...`,
         exportingArtboard: '正在导出画板...',
         replacingSelection: '正在替换选中内容...',
+        makeImageBtn: '生成图片',
+        generatingImage: '正在生成图片...',
+        imagePlaced: '✓ 图片已放置！',
+        imageReplaced: '✓ 图片已替换选中内容！',
     },
     'en-US': {
         builderTab: 'Builder',
@@ -114,6 +118,10 @@ export const translations: Record<string, any> = {
         processingImage: (n: number, total: number) => `Processing image ${n}/${total}...`,
         exportingArtboard: 'Exporting artboard...',
         replacingSelection: 'Replacing selection...',
+        makeImageBtn: 'Make Image',
+        generatingImage: 'Generating image...',
+        imagePlaced: '✓ Image placed!',
+        imageReplaced: '✓ Image replaced selection!',
     },
 };
 
@@ -134,6 +142,7 @@ export function updateUI(settings: any) {
     document.querySelector('label[for="builder-desktop"]')!.textContent = t.desktop;
     document.querySelector('#build-btn')!.childNodes[2].textContent = t.buildBtn; // Respect spinner
     document.querySelector('#edit-in-place-btn')!.childNodes[2].textContent = t.editInPlace;
+    document.querySelector('#make-image-btn')!.childNodes[2].textContent = t.makeImageBtn;
     const expandIconBtn = document.getElementById('expand-icon-btn');
     if (expandIconBtn) {
         expandIconBtn.setAttribute('data-tooltip', t.expandBtn);

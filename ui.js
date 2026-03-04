@@ -79,7 +79,11 @@
       imageModelId: "\u56FE\u7247\u6A21\u578B Endpoint ID",
       processingImage: (n, total) => `\u6B63\u5728\u5904\u7406\u56FE\u7247 ${n}/${total}...`,
       exportingArtboard: "\u6B63\u5728\u5BFC\u51FA\u753B\u677F...",
-      replacingSelection: "\u6B63\u5728\u66FF\u6362\u9009\u4E2D\u5185\u5BB9..."
+      replacingSelection: "\u6B63\u5728\u66FF\u6362\u9009\u4E2D\u5185\u5BB9...",
+      makeImageBtn: "\u751F\u6210\u56FE\u7247",
+      generatingImage: "\u6B63\u5728\u751F\u6210\u56FE\u7247...",
+      imagePlaced: "\u2713 \u56FE\u7247\u5DF2\u653E\u7F6E\uFF01",
+      imageReplaced: "\u2713 \u56FE\u7247\u5DF2\u66FF\u6362\u9009\u4E2D\u5185\u5BB9\uFF01"
     },
     "en-US": {
       builderTab: "Builder",
@@ -137,7 +141,11 @@
       imageModelId: "Image Model Endpoint ID",
       processingImage: (n, total) => `Processing image ${n}/${total}...`,
       exportingArtboard: "Exporting artboard...",
-      replacingSelection: "Replacing selection..."
+      replacingSelection: "Replacing selection...",
+      makeImageBtn: "Make Image",
+      generatingImage: "Generating image...",
+      imagePlaced: "\u2713 Image placed!",
+      imageReplaced: "\u2713 Image replaced selection!"
     }
   };
   function updateUI(settings2) {
@@ -153,6 +161,7 @@
     document.querySelector('label[for="builder-desktop"]').textContent = t.desktop;
     document.querySelector("#build-btn").childNodes[2].textContent = t.buildBtn;
     document.querySelector("#edit-in-place-btn").childNodes[2].textContent = t.editInPlace;
+    document.querySelector("#make-image-btn").childNodes[2].textContent = t.makeImageBtn;
     const expandIconBtn = document.getElementById("expand-icon-btn");
     if (expandIconBtn) {
       expandIconBtn.setAttribute("data-tooltip", t.expandBtn);
@@ -345,6 +354,8 @@
       updateRefList();
     } else if (msg.type === "artboard-with-selection-result") {
       window.__artboardSelectionResult = msg;
+    } else if (msg.type === "selection-size-result") {
+      window.__selectionSizeResult = msg;
     } else {
       updateUI(settings);
     }
@@ -817,6 +828,114 @@ Keep the same overall style, dimensions, and visual language as the surrounding 
       btn.classList.remove("loading");
       thinkingContainer.classList.remove("active");
       if (lastGeneratedCode) copyBtn.style.display = "flex";
+      abortController = null;
+    }
+  });
+  document.getElementById("make-image-btn").onclick = () => __async(null, null, function* () {
+    var _a, _b, _c;
+    const prompt = document.getElementById("prompt-input").value;
+    const btn = document.getElementById("make-image-btn");
+    const buildBtn = document.getElementById("build-btn");
+    const editInPlaceBtn = document.getElementById("edit-in-place-btn");
+    const status = document.getElementById("builder-status");
+    const thinkingContainer = document.getElementById("thinking-container");
+    const t = translations[settings.language];
+    if (!prompt) {
+      status.textContent = t.enterDescription;
+      status.style.display = "block";
+      return;
+    }
+    if (!settings.apiKey) {
+      status.textContent = t.setApiKey;
+      status.style.display = "block";
+      return;
+    }
+    btn.disabled = true;
+    buildBtn.disabled = true;
+    editInPlaceBtn.disabled = true;
+    btn.classList.add("loading");
+    status.textContent = "";
+    status.style.display = "none";
+    copyBtn.style.display = "none";
+    thinkingContainer.classList.add("active");
+    document.getElementById("thinking-status").textContent = t.generatingImage;
+    abortController = new AbortController();
+    try {
+      window.__selectionSizeResult = null;
+      parent.postMessage({ pluginMessage: { type: "get-selection-size" } }, "*");
+      const sizeResult = yield new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Timeout waiting for selection size")), 1e4);
+        const checkInterval = setInterval(() => {
+          if (abortController == null ? void 0 : abortController.signal.aborted) {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+            reject(new Error("AbortError"));
+            return;
+          }
+          const result = window.__selectionSizeResult;
+          if (result) {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+            window.__selectionSizeResult = null;
+            resolve(result);
+          }
+        }, 100);
+      });
+      const imgWidth = sizeResult.width;
+      const imgHeight = sizeResult.height;
+      const selectionId = sizeResult.hasSelection ? sizeResult.selectionId : null;
+      const MIN_PIXELS = 3686400;
+      let genWidth = imgWidth;
+      let genHeight = imgHeight;
+      if (genWidth * genHeight < MIN_PIXELS) {
+        const scale = Math.ceil(Math.sqrt(MIN_PIXELS / (genWidth * genHeight)));
+        genWidth = genWidth * scale;
+        genHeight = genHeight * scale;
+      }
+      document.getElementById("thinking-status").textContent = t.generatingImage;
+      document.getElementById("token-counter").textContent = `${imgWidth}x${imgHeight}`;
+      const response = yield fetch("https://ark.cn-beijing.volces.com/api/v3/images/generations", {
+        method: "POST",
+        signal: abortController.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${settings.apiKey}`
+        },
+        body: JSON.stringify({
+          model: settings.imageModelId || DEFAULT_IMAGE_MODEL,
+          prompt,
+          response_format: "b64_json",
+          size: `${genWidth}x${genHeight}`
+        })
+      });
+      if (!response.ok) {
+        const err = yield response.json();
+        throw new Error(((_a = err.error) == null ? void 0 : _a.message) || "Image generation API request failed");
+      }
+      const data = yield response.json();
+      const b64 = (_c = (_b = data.data) == null ? void 0 : _b[0]) == null ? void 0 : _c.b64_json;
+      if (!b64) throw new Error("No image data returned from API");
+      document.getElementById("thinking-status").textContent = t.buildingLayers;
+      parent.postMessage({
+        pluginMessage: {
+          type: "place-image",
+          imageData: b64,
+          width: imgWidth,
+          height: imgHeight,
+          selectionId
+        }
+      }, "*");
+      status.textContent = selectionId ? t.imageReplaced : t.imagePlaced;
+    } catch (err) {
+      if (err.name === "AbortError" || err.message === "AbortError") status.textContent = t.generationStopped;
+      else status.textContent = `${t.errorPrefix}${err.message}`;
+    } finally {
+      status.style.display = "block";
+      btn.disabled = false;
+      buildBtn.disabled = false;
+      editInPlaceBtn.disabled = false;
+      btn.classList.remove("loading");
+      thinkingContainer.classList.remove("active");
       abortController = null;
     }
   });

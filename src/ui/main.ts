@@ -124,6 +124,9 @@ window.onmessage = (event) => {
     } else if (msg.type === 'artboard-with-selection-result') {
         // Store the result for the edit-in-place handler to pick up
         (window as any).__artboardSelectionResult = msg;
+    } else if (msg.type === 'selection-size-result') {
+        // Store the result for the make-image handler to pick up
+        (window as any).__selectionSizeResult = msg;
     } else {
         updateUI(settings);
     }
@@ -686,6 +689,125 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
         abortController = null;
     }
 };
+
+document.getElementById('make-image-btn')!.onclick = async () => {
+    const prompt = (document.getElementById('prompt-input') as HTMLTextAreaElement).value;
+    const btn = document.getElementById('make-image-btn') as HTMLButtonElement;
+    const buildBtn = document.getElementById('build-btn') as HTMLButtonElement;
+    const editInPlaceBtn = document.getElementById('edit-in-place-btn') as HTMLButtonElement;
+    const status = document.getElementById('builder-status')!;
+    const thinkingContainer = document.getElementById('thinking-container')!;
+    const t = translations[settings.language];
+
+    if (!prompt) { status.textContent = t.enterDescription; status.style.display = 'block'; return; }
+    if (!settings.apiKey) { status.textContent = t.setApiKey; status.style.display = 'block'; return; }
+
+    btn.disabled = true;
+    buildBtn.disabled = true;
+    editInPlaceBtn.disabled = true;
+    btn.classList.add('loading');
+    status.textContent = '';
+    status.style.display = 'none';
+    copyBtn.style.display = 'none';
+    thinkingContainer.classList.add('active');
+    document.getElementById('thinking-status')!.textContent = t.generatingImage;
+
+    abortController = new AbortController();
+
+    try {
+        // Step 1: Get selection size from Figma
+        (window as any).__selectionSizeResult = null;
+        parent.postMessage({ pluginMessage: { type: 'get-selection-size' } }, '*');
+
+        const sizeResult: any = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timeout waiting for selection size')), 10000);
+            const checkInterval = setInterval(() => {
+                if (abortController?.signal.aborted) {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeout);
+                    reject(new Error('AbortError'));
+                    return;
+                }
+                const result = (window as any).__selectionSizeResult;
+                if (result) {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeout);
+                    (window as any).__selectionSizeResult = null;
+                    resolve(result);
+                }
+            }, 100);
+        });
+
+        const imgWidth = sizeResult.width;
+        const imgHeight = sizeResult.height;
+        const selectionId = sizeResult.hasSelection ? sizeResult.selectionId : null;
+
+        // Scale up to meet API minimum pixel requirement (3686400 pixels) while preserving aspect ratio
+        const MIN_PIXELS = 3686400;
+        let genWidth = imgWidth;
+        let genHeight = imgHeight;
+        if (genWidth * genHeight < MIN_PIXELS) {
+            const scale = Math.ceil(Math.sqrt(MIN_PIXELS / (genWidth * genHeight)));
+            genWidth = genWidth * scale;
+            genHeight = genHeight * scale;
+        }
+
+        document.getElementById('thinking-status')!.textContent = t.generatingImage;
+        document.getElementById('token-counter')!.textContent = `${imgWidth}x${imgHeight}`;
+
+        // Step 2: Call image generation API (generate at large size, Figma will resize via FILL)
+        const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+            method: 'POST',
+            signal: abortController.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`
+            },
+            body: JSON.stringify({
+                model: settings.imageModelId || DEFAULT_IMAGE_MODEL,
+                prompt: prompt,
+                response_format: 'b64_json',
+                size: `${genWidth}x${genHeight}`
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error?.message || 'Image generation API request failed');
+        }
+
+        const data = await response.json();
+        const b64 = data.data?.[0]?.b64_json;
+        if (!b64) throw new Error('No image data returned from API');
+
+        // Step 3: Send to Figma to place the image
+        document.getElementById('thinking-status')!.textContent = t.buildingLayers;
+        parent.postMessage({
+            pluginMessage: {
+                type: 'place-image',
+                imageData: b64,
+                width: imgWidth,
+                height: imgHeight,
+                selectionId: selectionId
+            }
+        }, '*');
+
+        status.textContent = selectionId ? t.imageReplaced : t.imagePlaced;
+
+    } catch (err: any) {
+        if (err.name === 'AbortError' || err.message === 'AbortError') status.textContent = t.generationStopped;
+        else status.textContent = `${t.errorPrefix}${err.message}`;
+    } finally {
+        status.style.display = 'block';
+        btn.disabled = false;
+        buildBtn.disabled = false;
+        editInPlaceBtn.disabled = false;
+        btn.classList.remove('loading');
+        thinkingContainer.classList.remove('active');
+        abortController = null;
+    }
+};
+
 
 document.getElementById('figma-to-tailwind-btn')!.onclick = () => {
     const status = document.getElementById('tailwind-status')!;

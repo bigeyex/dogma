@@ -384,4 +384,118 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
         }
         return;
     }
+
+    if (msg.type === 'get-selection-size') {
+        const selection = figma.currentPage.selection;
+        if (selection.length > 0) {
+            const node = selection[0];
+            const bounds = (node as SceneNode).absoluteBoundingBox;
+            if (bounds) {
+                figma.ui.postMessage({
+                    type: 'selection-size-result',
+                    width: Math.round(bounds.width),
+                    height: Math.round(bounds.height),
+                    hasSelection: true,
+                    selectionId: node.id
+                });
+            } else {
+                figma.ui.postMessage({
+                    type: 'selection-size-result',
+                    width: 2848,
+                    height: 1600,
+                    hasSelection: false
+                });
+            }
+        } else {
+            figma.ui.postMessage({
+                type: 'selection-size-result',
+                width: 2848,
+                height: 1600,
+                hasSelection: false
+            });
+        }
+        return;
+    }
+
+    if (msg.type === 'place-image') {
+        try {
+            const { imageData, width, height, selectionId } = msg as any;
+
+            // Decode base64 to bytes
+            const bytes = figma.base64Decode(imageData);
+
+            const image = figma.createImage(bytes);
+            const rect = figma.createRectangle();
+            rect.name = 'Generated Image';
+            rect.resize(width, height);
+            rect.fills = [{
+                type: 'IMAGE',
+                imageHash: image.hash,
+                scaleMode: 'FILL'
+            }];
+
+            if (selectionId) {
+                // Replace the selected node
+                const targetNode = await figma.getNodeByIdAsync(selectionId) as SceneNode;
+                if (targetNode && targetNode.parent) {
+                    const parent = targetNode.parent;
+                    const oldX = targetNode.x;
+                    const oldY = targetNode.y;
+
+                    // Find index
+                    let targetIndex = 0;
+                    if ('children' in parent) {
+                        for (let i = 0; i < (parent as FrameNode).children.length; i++) {
+                            if ((parent as FrameNode).children[i].id === targetNode.id) {
+                                targetIndex = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ('children' in parent) {
+                        (parent as FrameNode).insertChild(targetIndex, rect);
+                    } else {
+                        figma.currentPage.appendChild(rect);
+                    }
+
+                    // Preserve layout positioning (e.g. ABSOLUTE) and constraints
+                    if ('layoutPositioning' in targetNode) {
+                        (rect as any).layoutPositioning = (targetNode as any).layoutPositioning;
+                    }
+                    if ('constraints' in targetNode) {
+                        rect.constraints = (targetNode as any).constraints;
+                    }
+
+                    rect.x = oldX;
+                    rect.y = oldY;
+                    targetNode.remove();
+
+                    figma.currentPage.selection = [rect];
+                    figma.viewport.scrollAndZoomIntoView([rect]);
+                    figma.notify('✓ Image replaced selection');
+                } else {
+                    // Fallback: place on canvas
+                    figma.currentPage.appendChild(rect);
+                    rect.x = figma.viewport.center.x - (width / 2);
+                    rect.y = figma.viewport.center.y - (height / 2);
+                    figma.currentPage.selection = [rect];
+                    figma.viewport.scrollAndZoomIntoView([rect]);
+                    figma.notify('✓ Image placed on canvas');
+                }
+            } else {
+                // No selection: place on canvas
+                figma.currentPage.appendChild(rect);
+                rect.x = figma.viewport.center.x - (width / 2);
+                rect.y = figma.viewport.center.y - (height / 2);
+                figma.currentPage.selection = [rect];
+                figma.viewport.scrollAndZoomIntoView([rect]);
+                figma.notify('✓ Image placed on canvas');
+            }
+        } catch (error) {
+            figma.notify('Error placing image: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            console.error(error);
+        }
+        return;
+    }
 };
