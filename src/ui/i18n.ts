@@ -60,6 +60,8 @@ export const translations: Record<string, any> = {
         generatingImage: '正在生成图片...',
         imagePlaced: '✓ 图片已放置！',
         imageReplaced: '✓ 图片已替换选中内容！',
+        loadingComponents: '正在加载组件库...',
+        componentsLoaded: (n: number) => `已加载 ${n} 个组件`,
     },
     'en-US': {
         builderTab: 'Builder',
@@ -122,6 +124,8 @@ export const translations: Record<string, any> = {
         generatingImage: 'Generating image...',
         imagePlaced: '✓ Image placed!',
         imageReplaced: '✓ Image replaced selection!',
+        loadingComponents: 'Loading component library...',
+        componentsLoaded: (n: number) => `${n} components loaded`,
     },
 };
 
@@ -152,9 +156,9 @@ export function updateUI(settings: any) {
     document.getElementById('thinking-status')!.textContent = t.aiThinking;
     document.getElementById('token-counter')!.textContent = `0 ${t.tokens}`;
     const thinkingLabel = document.getElementById('thinking-label');
-    if (thinkingLabel) thinkingLabel.textContent = t.thinkingLabel;
+    if (thinkingLabel) thinkingLabel.setAttribute('data-tooltip', t.thinkingLabel);
     const generateImageLabel = document.getElementById('generate-image-label');
-    if (generateImageLabel) generateImageLabel.textContent = t.generateImage;
+    if (generateImageLabel) generateImageLabel.setAttribute('data-tooltip', t.generateImage);
 
     // Style Ref
     const addRefBtn = document.getElementById('add-ref-btn');

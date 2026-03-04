@@ -176,6 +176,59 @@ export async function buildFigmaNode(element: ParsedElement, customColors: Recor
     const styles = resolveClasses(element.classes, customColors, screenWidth);
     const hasFa = element.classes.some(c => c.startsWith('fa') && c !== 'fa-solid' && c !== 'fa-regular' && c !== 'fa-brands');
 
+    // Component instance handling
+    if (element.tagName === 'component') {
+        const key = element.attributes['data-component-key'];
+        const compType = element.attributes['data-component-type'] || 'component';
+
+        // Extract variant properties from data-variant-* attributes
+        const variantProps: Record<string, string> = {};
+        for (const [attr, val] of Object.entries(element.attributes)) {
+            if (attr.startsWith('data-variant-')) {
+                variantProps[attr.slice(13)] = val;
+            }
+        }
+
+        if (key) {
+            try {
+                let node: InstanceNode;
+                if (compType === 'componentSet') {
+                    const componentSet = await figma.importComponentSetByKeyAsync(key);
+                    let target = componentSet.defaultVariant;
+                    if (Object.keys(variantProps).length > 0) {
+                        for (const child of componentSet.children) {
+                            if (child.type === 'COMPONENT') {
+                                const cp = child.variantProperties;
+                                if (cp && Object.entries(variantProps).every(([k, v]) => cp[k] === v)) {
+                                    target = child;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    node = target.createInstance();
+                } else {
+                    const component = await figma.importComponentByKeyAsync(key);
+                    node = component.createInstance();
+                }
+
+                // Apply sizing from Tailwind classes if specified
+                if (typeof styles.width === 'number') node.resize(styles.width, node.height);
+                if (typeof styles.height === 'number') node.resize(node.width, styles.height);
+
+                return { node, styles };
+            } catch (e) {
+                console.error('Failed to instantiate component:', e);
+                // Fallback: create a placeholder frame
+                const placeholder = figma.createFrame();
+                placeholder.name = `component: ${key}`;
+                placeholder.fills = [{ type: 'SOLID', color: { r: 0.95, g: 0.95, b: 0.95 } }];
+                placeholder.resize(100, 40);
+                return { node: placeholder, styles };
+            }
+        }
+    }
+
     // Icon handling
     if (hasFa) {
         const iconClass = element.classes.find(c => c.startsWith('fa-') && c !== 'fa-solid' && c !== 'fa-regular' && c !== 'fa-brands');

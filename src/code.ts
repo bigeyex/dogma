@@ -498,4 +498,53 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
         }
         return;
     }
+
+    if (msg.type === 'get-library-components') {
+        try {
+            const catalog: any[] = [];
+
+            // Find all components and component sets on the current page
+            const components = figma.currentPage.findAllWithCriteria({ types: ['COMPONENT'] });
+            const componentSets = figma.currentPage.findAllWithCriteria({ types: ['COMPONENT_SET'] });
+
+            // Track component set IDs so we skip individual variants that belong to a set
+            const setIds = new Set(componentSets.map(s => s.id));
+
+            for (const comp of components) {
+                // Skip components that are children of a component set (they're variants)
+                if (comp.parent && setIds.has(comp.parent.id)) continue;
+                catalog.push({
+                    key: comp.key,
+                    name: comp.name,
+                    description: comp.description || '',
+                    type: 'component',
+                    variantProperties: null,
+                    source: 'local'
+                });
+            }
+
+            for (const set of componentSets) {
+                const variantProps: Record<string, { values: string[] }> = {};
+                if (set.variantGroupProperties) {
+                    for (const [propKey, propVal] of Object.entries(set.variantGroupProperties)) {
+                        variantProps[propKey] = { values: (propVal as any).values || [] };
+                    }
+                }
+                catalog.push({
+                    key: set.key,
+                    name: set.name,
+                    description: set.description || '',
+                    type: 'componentSet',
+                    variantProperties: Object.keys(variantProps).length > 0 ? variantProps : null,
+                    source: 'local'
+                });
+            }
+
+            figma.ui.postMessage({ type: 'library-components-result', components: catalog });
+        } catch (error) {
+            console.error('Failed to get library components:', error);
+            figma.ui.postMessage({ type: 'library-components-result', components: [] });
+        }
+        return;
+    }
 };

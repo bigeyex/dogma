@@ -257,14 +257,29 @@ textarea:focus {
     gap: 6px;
 }
 
-.toggle-group input[type="radio"] {
+.toggle-group input[type="radio"],
+.toggle-group input[type="checkbox"] {
     display: none;
 }
 
-.toggle-group input[type="radio"]:checked+label {
+.toggle-group input[type="radio"]:checked+label,
+.toggle-group input[type="checkbox"]:checked+label {
     background: #333;
     color: #fff;
     font-weight: 500;
+}
+
+.toggle-group.icon-toggles {
+    gap: 2px;
+}
+
+.toggle-group.icon-toggles label {
+    padding: 9px 12px; /* 增加高度到约 38px (14+9+9 + border/margin if any) */
+    position: relative; /* Ensure tooltip positioning is relative to the label */
+}
+
+.toggle-group.icon-toggles label svg {
+    display: block;
 }
 
 .checkbox-group {

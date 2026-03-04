@@ -21,6 +21,13 @@ let settings = {
 
 let styleRefs: Array<{ id?: string, name: string, imageData?: string, loading?: boolean }> = [];
 
+let componentCatalog: Array<{
+    key: string; name: string; description: string;
+    type: 'component' | 'componentSet';
+    variantProperties: Record<string, { values: string[] }> | null;
+    source: string;
+}> = [];
+
 let abortController: AbortController | null = null;
 let lastGeneratedCode = "";
 
@@ -127,10 +134,41 @@ window.onmessage = (event) => {
     } else if (msg.type === 'selection-size-result') {
         // Store the result for the make-image handler to pick up
         (window as any).__selectionSizeResult = msg;
+    } else if (msg.type === 'library-components-result') {
+        componentCatalog = msg.components || [];
+        if (componentCatalog.length > 0) {
+            console.log(`Loaded ${componentCatalog.length} library components`);
+        }
     } else {
         updateUI(settings);
     }
 };
+
+// Request component catalog from Figma on init
+parent.postMessage({ pluginMessage: { type: 'get-library-components' } }, '*');
+
+function buildComponentCatalogPrompt(): string {
+    if (componentCatalog.length === 0) return '';
+
+    let text = '\n\nAVAILABLE DESIGN COMPONENTS (from Figma library):\n';
+    text += 'You may use these real components in your design with <component> tags.\n';
+    text += 'Format: <component data-component-key="KEY" data-component-type="component|componentSet" data-variant-PROPNAME="VALUE"></component>\n';
+    text += 'You can wrap component tags in layout containers alongside other HTML elements. You can also apply Tailwind sizing classes on them. Choose the most appropriate variant based on context.\n\n';
+
+    for (const comp of componentCatalog) {
+        text += `- ${comp.name} (key="${comp.key}", type="${comp.type}")`;
+        if (comp.description) text += `: ${comp.description}`;
+        if (comp.variantProperties) {
+            const props = Object.entries(comp.variantProperties)
+                .map(([k, v]) => `${k}=[${v.values.join('|')}]`)
+                .join(', ');
+            text += ` | Variants: ${props}`;
+        }
+        text += '\n';
+    }
+
+    return text;
+}
 
 function updateRefList() {
     const container = document.getElementById('ref-items')!;
@@ -495,7 +533,7 @@ document.getElementById('build-btn')!.onclick = async () => {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. AVOID using CSS Grid. Always prefer Flexbox for all layouts to ensure compatibility with Figma Auto Layout. Explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. ${imageSystemRule}`
+                        content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. You can use both Flexbox and CSS Grid for layouts. For Flexbox, explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. For CSS Grid, use 'grid', 'grid-cols-*', 'grid-rows-*', 'gap-*', etc. 10. Do NOT use <table> tags for layout or data presentation. Use Flexbox or Grid instead. ${imageSystemRule}${buildComponentCatalogPrompt()}`
                     },
                     { role: 'user', content: messageContent }
                 ]
@@ -634,7 +672,7 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an elite UI engineer. TASK: Look at the provided UI design screenshot. There is a region highlighted with a RED BORDER. Generate a standalone HTML snippet using Tailwind CSS classes that replaces ONLY the content within that red-bordered region. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Match the existing visual style, colors, typography, and design language. 3. Use modern, premium aesthetics consistent with the surrounding design. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon). 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]). 9. AVOID using CSS Grid. Always prefer Flexbox. Explicitly specify flex direction using 'flex-row' or 'flex-col'. ${imageSystemRule}`
+                        content: `You are an elite UI engineer. TASK: Look at the provided UI design screenshot. There is a region highlighted with a RED BORDER. Generate a standalone HTML snippet using Tailwind CSS classes that replaces ONLY the content within that red-bordered region. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Match the existing visual style, colors, typography, and design language. 3. Use modern, premium aesthetics consistent with the surrounding design. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon). 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]). 9. AVOID using CSS Grid. Always prefer Flexbox. Explicitly specify flex direction using 'flex-row' or 'flex-col'. ${imageSystemRule}${buildComponentCatalogPrompt()}`
                     },
                     { role: 'user', content: messageContent }
                 ]
