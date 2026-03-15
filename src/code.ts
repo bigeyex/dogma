@@ -257,6 +257,8 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
     if (msg.type === 'replace-selection' && msg.html) {
         try {
             const selectionId = (msg as any).selectionId;
+            const intent = (msg as any).intent || 'REPLACE';
+
             const targetNode = await figma.getNodeByIdAsync(selectionId) as SceneNode;
             if (!targetNode) {
                 figma.notify('Error: Could not find the original selected node.');
@@ -264,21 +266,20 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
             }
 
             const parentNode = targetNode.parent;
-            if (!parentNode || parentNode.type === 'PAGE') {
-                figma.notify('Error: Cannot replace a top-level frame. Select an element inside an artboard.');
-                return;
-            }
+            
+            // Check if we are trying to edit a top-level Artboard/Frame
+            const isTopLevel = !parentNode || parentNode.type === 'PAGE';
+            const isContainer = targetNode.type === 'FRAME' || targetNode.type === 'SECTION' || targetNode.type === 'GROUP';
 
-            // Find the artboard for width reference
-            let artboard: FrameNode | null = null;
-            let current: BaseNode | null = targetNode;
-            while (current) {
-                if (current.parent && current.parent.type === 'PAGE' &&
-                    (current.type === 'FRAME' || current.type === 'COMPONENT' || current.type === 'INSTANCE')) {
-                    artboard = current as FrameNode;
-                    break;
+            // Special handling for Top-Level Artboards
+            if (isTopLevel) {
+                // We only allow APPEND (adding content) for top-level artboards
+                if (intent === 'APPEND' && isContainer) {
+                    // Allowed
+                } else {
+                    figma.notify('Error: Cannot replace a top-level frame. Select an element inside, or use "Add" intent to append to the artboard.');
+                    return;
                 }
-                current = current.parent;
             }
 
             const iconMap = msg.icons || {};
@@ -315,61 +316,106 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
             const oldWidth = selBounds.width;
             const oldHeight = selBounds.height;
 
-            // Find index of the target node in parent
-            let targetIndex = -1;
-            if ('children' in parentNode) {
+            // Build new nodes
+            const newResults: { node: SceneNode, styles: any }[] = [];
+            for (const child of targetElements) {
+                const result = await buildFigmaNode(child, customColors, iconMap, Math.round(oldWidth), Math.round(screenWidth), bodyStyles);
+                if (result) {
+                    newResults.push(result);
+                }
+            }
+            
+            const newNodes = newResults.map(r => r.node);
+
+            // --- INSERTION LOGIC ---
+            
+            // Case 1: Append to Container (e.g. Artboard or Group)
+            // If intent is APPEND and target is a container, we add INSIDE it.
+            if (intent === 'APPEND' && isContainer) {
+                const container = targetNode as FrameNode; // Frame, Group, Section all have appendChild
+                for (const res of newResults) {
+                    container.appendChild(res.node);
+                    
+                    // Apply constraints
+                    applySizingConstraints(res.node, res.styles, container.layoutMode || 'NONE', bodyStyles.display || 'flex');
+                    applyLayoutConstraints(res.node, res.styles, container.layoutMode || 'NONE');
+                    
+                    if (res.styles.position === 'ABSOLUTE') {
+                        applyAbsolutePositioning(res.node, res.styles, container);
+                    }
+                }
+                figma.notify(`✓ Appended ${newNodes.length} element(s) to ${targetNode.name}`);
+            } 
+            // Case 2: Replace, Insert Before, Insert After (Sibling Operation)
+            else {
+                if (!parentNode || isTopLevel) {
+                     // Should be covered by early check, but just in case
+                     figma.notify('Error: Cannot insert siblings for a top-level node.');
+                     return;
+                }
+
                 const parentWithChildren = parentNode as FrameNode;
+                
+                // Find index of the target node in parent
+                let targetIndex = -1;
                 for (let i = 0; i < parentWithChildren.children.length; i++) {
                     if (parentWithChildren.children[i].id === targetNode.id) {
                         targetIndex = i;
                         break;
                     }
                 }
-            }
 
-            // Build new nodes
-            const newNodes: SceneNode[] = [];
-            for (const child of targetElements) {
-                const result = await buildFigmaNode(child, customColors, iconMap, Math.round(oldWidth), Math.round(screenWidth), bodyStyles);
-                if (result) {
-                    newNodes.push(result.node);
-                    if ('children' in parentNode) {
-                        (parentNode as FrameNode).appendChild(result.node);
-                    }
-                    if (result.styles.position === 'ABSOLUTE') {
-                        applySizingConstraints(result.node, result.styles, (parentNode as FrameNode).layoutMode || 'NONE', bodyStyles.display || 'flex');
-                        applyLayoutConstraints(result.node, result.styles, (parentNode as FrameNode).layoutMode || 'NONE');
-                        applyAbsolutePositioning(result.node, result.styles, parentNode as FrameNode);
-                    } else {
-                        applySizingConstraints(result.node, result.styles, (parentNode as FrameNode).layoutMode || 'NONE', bodyStyles.display || 'flex');
-                        applyLayoutConstraints(result.node, result.styles, (parentNode as FrameNode).layoutMode || 'NONE');
-                    }
-                }
-            }
+                // Determine Insert Index
+                let insertIndex = targetIndex;
+                if (intent === 'INSERT_AFTER') insertIndex = targetIndex + 1;
+                // INSERT_BEFORE defaults to targetIndex (pushing target down)
 
-            // If parent uses auto-layout, move new nodes to the old index position
-            if ('children' in parentNode && targetIndex !== -1) {
-                const parentWithChildren = parentNode as FrameNode;
-                // Move each new node to the correct position
-                for (let i = 0; i < newNodes.length; i++) {
-                    try {
-                        parentWithChildren.insertChild(targetIndex + i, newNodes[i]);
-                    } catch (_e) {
-                        // Already appended, skip
+                // Insert Nodes
+                for (let i = 0; i < newResults.length; i++) {
+                    const res = newResults[i];
+                    // Note: insertChild handles index clamping automatically? 
+                    // Safest is to just insert.
+                    parentWithChildren.insertChild(insertIndex + i, res.node);
+
+                    // Apply constraints
+                    applySizingConstraints(res.node, res.styles, parentWithChildren.layoutMode || 'NONE', bodyStyles.display || 'flex');
+                    applyLayoutConstraints(res.node, res.styles, parentWithChildren.layoutMode || 'NONE');
+
+                    if (res.styles.position === 'ABSOLUTE') {
+                        applyAbsolutePositioning(res.node, res.styles, parentWithChildren);
                     }
                 }
-            }
 
-            // If parent doesn't use auto-layout, position the new node at the old position
-            if (!(parentNode as FrameNode).layoutMode || (parentNode as FrameNode).layoutMode === 'NONE') {
-                if (newNodes.length > 0) {
-                    newNodes[0].x = oldX;
-                    newNodes[0].y = oldY;
+                // Handle Layout / Positioning for Fixed Layouts
+                const parentLayout = parentWithChildren.layoutMode;
+                if (!parentLayout || parentLayout === 'NONE') {
+                    if (newResults.length > 0) {
+                        newResults.forEach((res, i) => {
+                             // Only adjust x/y if NOT absolute
+                             if (res.styles.position !== 'ABSOLUTE') {
+                                  if (intent === 'REPLACE') {
+                                      res.node.x = oldX;
+                                      res.node.y = oldY;
+                                  } else if (intent === 'INSERT_BEFORE') {
+                                      res.node.x = oldX;
+                                      res.node.y = oldY - res.node.height - 20; 
+                                  } else if (intent === 'INSERT_AFTER') {
+                                      res.node.x = oldX;
+                                      res.node.y = oldY + oldHeight + 20;
+                                  }
+                             }
+                        });
+                    }
+                }
+
+                // Handle REPLACE removal
+                if (intent === 'REPLACE') {
+                    targetNode.remove();
+                    figma.notify(`✓ Replaced selection with ${newNodes.length} new element(s)`);
+                } else {
+                    figma.notify(`✓ Inserted ${newNodes.length} element(s)`);
                 }
             }
-
-            // Remove old node
-            targetNode.remove();
 
             // Select new nodes
             if (newNodes.length > 0) {
@@ -377,7 +423,6 @@ figma.ui.onmessage = async (msg: { type: string; html?: string; viewport?: strin
                 figma.viewport.scrollAndZoomIntoView(newNodes);
             }
 
-            figma.notify(`✓ Replaced selection with ${newNodes.length} new element(s)`);
         } catch (error) {
             figma.notify('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
             console.error(error);

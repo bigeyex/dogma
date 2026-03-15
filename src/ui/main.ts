@@ -30,6 +30,7 @@ let componentCatalog: Array<{
 
 let abortController: AbortController | null = null;
 let lastGeneratedCode = "";
+let lastLogEntry: any = null;
 
 /* ============================================================================
    TAB MANAGEMENT
@@ -246,9 +247,26 @@ copyBtn.onclick = () => {
     textArea.remove();
 
     const originalHTML = copyBtn.innerHTML;
-    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
     setTimeout(() => {
         copyBtn.innerHTML = originalHTML;
+    }, 2000);
+};
+
+const copyLogBtn = document.getElementById('copy-log-btn')!;
+copyLogBtn.onclick = () => {
+    if (!lastLogEntry) return;
+    const textArea = document.createElement("textarea");
+    textArea.value = JSON.stringify(lastLogEntry, null, 2);
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand("Copy");
+    textArea.remove();
+
+    const originalHTML = copyLogBtn.innerHTML;
+    copyLogBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    setTimeout(() => {
+        copyLogBtn.innerHTML = originalHTML;
     }, 2000);
 };
 
@@ -519,6 +537,14 @@ document.getElementById('build-btn')!.onclick = async () => {
             ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Include specific details about the scene, subject, lighting, and how the image should blend perfectly with the rest of the design's colors and aesthetic. IMPORTANT: Generate visual materials only, avoid generating charts, structure diagrams, schematics, or any content with text. Do NOT specify any 'src' attribute for images."
             : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
 
+        const messages = [
+            {
+                role: 'system',
+                content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. You can use both Flexbox and CSS Grid for layouts. For Flexbox, explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. For CSS Grid, use 'grid', 'grid-cols-*', 'grid-rows-*', 'gap-*', etc. 10. Do NOT use <table> tags for layout or data presentation. Use Flexbox or Grid instead. ${imageSystemRule}${buildComponentCatalogPrompt()}`
+            },
+            { role: 'user', content: messageContent }
+        ];
+
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
             signal: abortController.signal,
@@ -530,13 +556,7 @@ document.getElementById('build-btn')!.onclick = async () => {
                 model: settings.codingModelId || DEFAULT_CODING_MODEL,
                 stream: true,
                 thinking: settings.thinking ? undefined : { type: 'disabled' },
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are an elite UI engineer. TASK: Generate a standalone HTML snippet using Tailwind CSS classes based on the user description. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Use modern, premium aesthetics. 3. Ensure full responsiveness. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon) and vibrant colors. 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. Ensure all text in the generated HTML is in ${settings.language === 'zh-CN' ? 'Chinese' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]) directly in the class names. 9. You can use both Flexbox and CSS Grid for layouts. For Flexbox, explicitly specify flex direction using 'flex-row' (preferred/default) or 'flex-col' for all flex containers. For CSS Grid, use 'grid', 'grid-cols-*', 'grid-rows-*', 'gap-*', etc. 10. Do NOT use <table> tags for layout or data presentation. Use Flexbox or Grid instead. ${imageSystemRule}${buildComponentCatalogPrompt()}`
-                    },
-                    { role: 'user', content: messageContent }
-                ]
+                messages: messages
             })
         });
 
@@ -553,6 +573,16 @@ document.getElementById('build-btn')!.onclick = async () => {
             document.getElementById('token-counter')!.textContent = `${tokens} ${t.tokens}`;
             lastGeneratedCode = text;
         });
+
+        lastLogEntry = {
+            type: 'BUILD',
+            userPrompt: prompt,
+            fullMessages: messages,
+            llmResponse: fullHtml,
+            intent: 'BUILD',
+            timestamp: new Date().toISOString()
+        };
+        document.getElementById('copy-log-btn')!.style.display = 'block';
 
         let html = fullHtml.trim();
         html = html.replace(/^```html\n?/, '').replace(/\n?```$/, '');
@@ -643,8 +673,25 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
         ];
 
         const userInstruction = prompt
-            ? `The image shows a UI design with a region highlighted by a red border. Regenerate ONLY the content inside the red-bordered region based on the following instruction: ${prompt}\n\nKeep the same overall style, dimensions, and visual language as the surrounding design. Return only the HTML snippet for the red-bordered region, not the entire page.`
-            : `The image shows a UI design with a region highlighted by a red border. Regenerate ONLY the content inside the red-bordered region. Improve or refine it while keeping the same overall style, dimensions, and visual language as the surrounding design. Return only the HTML snippet for the red-bordered region, not the entire page.`;
+            ? `The image shows a UI design with a region highlighted by a red border.
+1. Analyze the user's request to determine the INTENT:
+   - REPLACE: Replace the content inside the red border (default).
+   - INSERT_BEFORE: Insert new content BEFORE the red-bordered element.
+   - INSERT_AFTER: Insert new content AFTER the red-bordered element.
+   - APPEND: Append new content at the end of the red-bordered container (use this if the red border surrounds the entire Artboard/Page).
+2. Generate the HTML snippet based on the request.
+3. Return the response in this format:
+   <!-- INTENT: [INTENT_TYPE] -->
+   [HTML_CONTENT]
+
+User Request: ${prompt}
+
+Keep the same overall style, dimensions, and visual language as the surrounding design.`
+            : `The image shows a UI design with a region highlighted by a red border. Regenerate ONLY the content inside the red-bordered region. Improve or refine it while keeping the same overall style, dimensions, and visual language as the surrounding design. Return only the HTML snippet for the red-bordered region.
+Intent should be REPLACE.
+Format:
+<!-- INTENT: REPLACE -->
+[HTML_CONTENT]`;
 
         messageContent.push({ type: 'text', text: userInstruction });
 
@@ -658,6 +705,14 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
             ? "10. IMPORTANT: You can generate images using <img> tags. For each image, provide a DETAILED visual description in the 'alt' attribute that will be used as an image generation prompt. Do NOT specify any 'src' attribute for images."
             : "10. IMPORTANT: Image generation is currently disabled. Do NOT generate any <img> tags, placeholders, or references to external images.";
 
+        const messages = [
+            {
+                role: 'system',
+                content: `You are an elite UI engineer. TASK: Look at the provided UI design screenshot. There is a region highlighted with a RED BORDER. Generate a standalone HTML snippet using Tailwind CSS classes based on the user's request. ${viewportDesc} RULES: 1. START your response with a comment line indicating the intent: <!-- INTENT: REPLACE --> (or INSERT_BEFORE, INSERT_AFTER, APPEND). 2. Only return code, no markdown block wrappers. 3. Match the existing visual style, colors, typography, and design language. 4. Use modern, premium aesthetics consistent with the surrounding design. 5. Use Font Awesome icons where appropriate (fa-solid fa-icon). 6. Include decent padding and gap for a clean look. 7. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. 8. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 9. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]). 10. AVOID using CSS Grid. Always prefer Flexbox. Explicitly specify flex direction using 'flex-row' or 'flex-col'. ${imageSystemRule}${buildComponentCatalogPrompt()}`
+            },
+            { role: 'user', content: messageContent }
+        ];
+
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
             signal: abortController.signal,
@@ -669,13 +724,7 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
                 model: settings.codingModelId || DEFAULT_CODING_MODEL,
                 stream: true,
                 thinking: settings.thinking ? undefined : { type: 'disabled' },
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are an elite UI engineer. TASK: Look at the provided UI design screenshot. There is a region highlighted with a RED BORDER. Generate a standalone HTML snippet using Tailwind CSS classes that replaces ONLY the content within that red-bordered region. ${viewportDesc} RULES: 1. Only return code, no markdown block wrappers. 2. Match the existing visual style, colors, typography, and design language. 3. Use modern, premium aesthetics consistent with the surrounding design. 4. Use Font Awesome icons where appropriate (fa-solid fa-icon). 5. Include decent padding and gap for a clean look. 6. Content Language: ${settings.language === 'zh-CN' ? 'Chinese (Simplified)' : 'English'}. 7. IMPORTANT: Strictly AVOID using standard CSS or inline style="" attributes. Use ONLY pure Tailwind CSS utility classes. 8. Enclose ALL background colors and specific styling in Tailwind arbitrary value classes (e.g., bg-[#123456], text-[#abcdef]). 9. AVOID using CSS Grid. Always prefer Flexbox. Explicitly specify flex direction using 'flex-row' or 'flex-col'. ${imageSystemRule}${buildComponentCatalogPrompt()}`
-                    },
-                    { role: 'user', content: messageContent }
-                ]
+                messages: messages
             })
         });
 
@@ -696,6 +745,25 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
         let html = fullHtml.trim();
         html = html.replace(/^```html\n?/, '').replace(/\n?```$/, '');
 
+        // Extract Intent
+        let intent = 'REPLACE';
+        const intentMatch = html.match(/<!--\s*INTENT:\s*(\w+)\s*-->/i);
+        if (intentMatch) {
+            intent = intentMatch[1].toUpperCase();
+            // Remove the intent comment from HTML to keep it clean
+            html = html.replace(/<!--\s*INTENT:\s*\w+\s*-->\s*/i, '');
+        }
+
+        lastLogEntry = {
+            type: 'EDIT_IN_PLACE',
+            userPrompt: prompt,
+            fullMessages: messages,
+            llmResponse: fullHtml,
+            intent: intent,
+            timestamp: new Date().toISOString()
+        };
+        document.getElementById('copy-log-btn')!.style.display = 'block';
+
         // Resolve images
         html = await processImages(html, settings, abortController);
 
@@ -707,6 +775,7 @@ document.getElementById('edit-in-place-btn')!.onclick = async () => {
             pluginMessage: {
                 type: 'replace-selection',
                 html,
+                intent,
                 viewport,
                 icons: iconMap,
                 selectionId: artboardResult.selectionId
